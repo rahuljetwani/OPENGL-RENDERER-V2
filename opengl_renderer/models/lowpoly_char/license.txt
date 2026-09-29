@@ -1,0 +1,11 @@
+Model Information:
+* title:	Lowpoly Simple Character
+* source:	https://sketchfab.com/3d-models/lowpoly-simple-character-37fc10392dd24cb3a4c67306edc846c6
+* author:	BetelgeuseMan (https://sketchfab.com/betelgeuseman)
+
+Model License:
+* license type:	CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)
+* requirements:	Author must be credited. Commercial use is allowed.
+
+If you use this 3D model in your project be sure to copy paste this credit wherever you share it:
+This work is based on "Lowpoly Simple Character" (https://sketchfab.com/3d-models/lowpoly-simple-character-37fc10392dd24cb3a4c67306edc846c6) by BetelgeuseMan (https://sketchfab.com/betelgeuseman) licensed under CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)
