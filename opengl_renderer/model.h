@@ -1,54 +1,77 @@
 #ifndef MODEL_CLASS_H
 #define MODEL_CLASS_H
 
-#include<json/json.h>
-#include"mesh.h"
+#include <string>
+#include <vector>
+#include <unordered_map>
 
-using json = nlohmann::json;
+#include <assimp/Importer.hpp>
+#include <assimp/scene.h>
+#include <assimp/postprocess.h>
 
+#include "mesh.h"
 
+// Loads any format Assimp understands (glTF/GLB, FBX, OBJ, DAE, STL, 3DS, ...).
+//
+// The scene graph is KEPT (not flattened), so a robot arm exported as
+//   base -> shoulder -> upper_arm -> elbow -> forearm -> wrist -> gripper
+// can be animated at runtime by node name:  arm.SetJointAngle("elbow", axis, radians);
 class model
 {
-public: 
-	model(const char* file);
+public:
+	model(const std::string& file);
 
-	void Draw(Shader& shader, Camera& camera, float sizeScale = 1.0f);
+	bool IsLoaded() const { return loaded; }
+
+	// Root transform applied on top of the whole hierarchy (position / scale / rotate the model in the world)
+	glm::mat4 transform = glm::mat4(1.0f);
+
+	void Draw(Shader& shader, Camera& camera);		// colour pass
+	void DrawDepth(Shader& shader);					// shadow pass (geometry only)
+
+	// --- framing helpers ---
+	// World-space bounding box of the whole model (includes `transform` and current joint poses)
+	void GetBounds(glm::vec3& outMin, glm::vec3& outMax);
+	// Scales + moves `transform` so the model's largest side equals `size` and it stands on y = 0, centred on x/z
+	void FitToUnitSize(float size = 1.0f);
+
+	// --- joints / hierarchy ---
+	bool HasNode(const std::string& name) const;
+	// Replace a node's local transform outright
+	bool SetNodeLocalTransform(const std::string& name, const glm::mat4& local);
+	// Rotate a node by `radians` around `axis` (in the node's own local space), relative to its ORIGINAL pose.
+	// Calling it every frame with a new angle is exactly what you want for a robot joint.
+	bool SetJointAngle(const std::string& name, const glm::vec3& axis, float radians);
+	// Put everything back into the pose it was imported in
+	void ResetPose();
+	void PrintHierarchy() const;
 
 private:
-	const char* file;
-	std::vector<unsigned char> data;
-	json JSON; 
+	struct Node
+	{
+		std::string name;
+		int parent = -1;
+		std::vector<int> children;
+		std::vector<unsigned int> meshIndices;	// indices into `meshes`
+		glm::mat4 bindLocal = glm::mat4(1.0f);	// pose as imported
+		glm::mat4 local = glm::mat4(1.0f);		// current pose
+		glm::mat4 world = glm::mat4(1.0f);		// parent.world * local (rebuilt by updateWorld)
+	};
 
-	std::vector<mesh> meshes;
-	std::vector<glm::vec3> translationsMeshes;
-	std::vector<glm::quat> rotationsMeshes;
-	std::vector<glm::vec3> scalesMeshes;
-	std::vector<glm::mat4> matricesMeshes;
+	bool loaded = false;
+	std::string directory;
 
-	std::vector<std::string> loadedTexName;
-	std::vector<Texture> loadedTex;
+	std::vector<mesh> meshes;						// one per aiMesh, shared by every node that references it
+	std::vector<Node> nodes;						// depth-first order: a parent always comes before its children
+	std::unordered_map<std::string, int> nodeByName;
+	std::unordered_map<std::string, Texture> textureCache;	// "path" + type -> texture, so shared images load once
+	bool worldDirty = true;
 
-	void loadMesh(unsigned int indMesh);
-
-	void traverseNode(unsigned int nextNode, glm::mat4 matrix = glm::mat4(1.0f));
-
-	std::vector<unsigned char> getData();
-	std::vector<float> getFloats(json accessor);
-	std::vector<GLuint> getIndices(json accessor);
-	std::vector<Texture> getTextures();
-
-	std::vector<Vertex> assmebleVertices
-	(
-		std::vector<glm::vec3> position,
-		std::vector<glm::vec3> normals,
-		std::vector<glm::vec2> texUVs
-	);
-
-	std::vector<glm::vec2> groupFloatvec2(std::vector<float> floatVec);
-	std::vector<glm::vec3> groupFloatvec3(std::vector<float> floatVec);
-	std::vector<glm::vec4> groupFloatvec4(std::vector<float> floatVec);
-
-
-
+	int processNode(const aiNode* node, int parent);   // returns the new node's index
+	mesh processMesh(const aiScene* scene, const aiMesh* aMesh);
+	void loadMaterialTextures(const aiScene* scene, const aiMaterial* mat, aiTextureType aiType,
+		const char* typeName, bool srgb, std::vector<Texture>& out);
+	void updateWorld();
+	void printNode(int index, int depth) const;
 };
 #endif

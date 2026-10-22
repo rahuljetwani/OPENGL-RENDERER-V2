@@ -1,0 +1,3 @@
+﻿  main.cpp
+E:\Projects\opengl_Renderer\opengl_renderer\main.cpp(332,49): warning C4267: 'argument': conversion from 'size_t' to 'GLsizei', possible loss of data
+  opengl_renderer.vcxproj -> E:\Projects\opengl_Renderer\opengl_renderer\x64\Debug\opengl_renderer.exe

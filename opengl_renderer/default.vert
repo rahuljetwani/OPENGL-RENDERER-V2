@@ -1,38 +1,25 @@
 #version 330 core
 
-// Positions/Coordinates
 layout (location = 0) in vec3 aPos;
-// Normals 
 layout (location = 1) in vec3 aNormal;
-// Colors
 layout (location = 2) in vec3 aColor;
-// Texture Coordinates
 layout (location = 3) in vec2 aTex;
 
+out vec3 crntPos;       // world-space position
+out vec3 normal;        // world-space normal
+out vec3 color;
+out vec2 texCoord;
 
-out vec3 crntPos;                       //Output : current position for Fragment Shader
-out vec3 normal;                        //Output : normal for Fragment Shader
-out vec3 color;                         //output : color for fragment shader
-out vec2 texCoord;                      //output : texture coordinates for frament 
-out vec4 fragPosLight;
-
-uniform mat4 camMatrix;                 // Imports the camera matrix from the main function
-uniform mat4 model;                     // Imports the model matrix from the main function
-uniform mat4 translation;
-uniform mat4 rotation;
-uniform mat4 scale;
-uniform mat4 lightProjection;
-
-
+uniform mat4 camMatrix;         // projection * view
+uniform mat4 model;             // local -> world (already includes the node hierarchy + model root transform)
+uniform mat3 normalMatrix;      // transpose(inverse(mat3(model)))
 
 void main()
 {
-    crntPos = vec3(model * translation * -rotation * scale * vec4(aPos, 1.0f));     // calculates current position
-    normal = aNormal;                                                               // Assigns the normal from the Vertex Data to "Normal"    
-    color = aColor;                                                                 // Assigns the colors from the Vertex Data to "color"
-    texCoord = mat2(0.0, -1.0, 1.0, 0.0) * aTex;                                    // Assigns the texture coordinates from the Vertex Data to "texCoord"
-    fragPosLight = lightProjection * vec4(crntPos, 1.0f);
-    gl_Position = camMatrix * vec4(crntPos, 1.0);                              // Outputs the positions/coordinates of all vertices
-    
-
+    vec4 worldPos = model * vec4(aPos, 1.0);
+    crntPos  = worldPos.xyz;
+    normal   = normalMatrix * aNormal;      // normals must be transformed too, or lighting is wrong on rotated/scaled models
+    color    = aColor;
+    texCoord = aTex;                        // no UV hacks any more: Assimp + Texture.cpp agree on the convention
+    gl_Position = camMatrix * worldPos;
 }

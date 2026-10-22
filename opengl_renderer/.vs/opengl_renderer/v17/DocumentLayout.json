@@ -6,7 +6,68 @@
     {
       "Orientation": 0,
       "VerticalTabListWidth": 256,
+<<<<<<< HEAD
+      "DocumentGroups": [
+        {
+          "DockedWidth": 200,
+          "SelectedChildIndex": 0,
+          "Children": [
+            {
+              "$type": "Document",
+              "DocumentIndex": 0,
+              "Title": "main.cpp",
+              "DocumentMoniker": "E:\\Projects\\opengl_Renderer\\opengl_renderer\\main.cpp",
+              "RelativeDocumentMoniker": "main.cpp",
+              "ToolTip": "E:\\Projects\\opengl_Renderer\\opengl_renderer\\main.cpp",
+              "RelativeToolTip": "main.cpp",
+              "ViewState": "AgIAAMYAAAAAAAAAAAAAABgAAAABAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000677|",
+              "WhenOpened": "2026-09-30T04:48:11.181Z",
+              "IsPinned": true,
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 1,
+              "Title": "model.cpp",
+              "DocumentMoniker": "E:\\Projects\\opengl_Renderer\\opengl_renderer\\model.cpp",
+              "RelativeDocumentMoniker": "model.cpp",
+              "ToolTip": "E:\\Projects\\opengl_Renderer\\opengl_renderer\\model.cpp",
+              "RelativeToolTip": "model.cpp",
+              "ViewState": "AgIAAFoAAAAAAAAAAAAAABsAAAAsAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000677|",
+              "WhenOpened": "2026-09-30T13:11:05.358Z"
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 2,
+              "Title": "shadowmap.frag",
+              "DocumentMoniker": "E:\\Projects\\opengl_Renderer\\opengl_renderer\\shadowmap.frag",
+              "RelativeDocumentMoniker": "shadowmap.frag",
+              "ToolTip": "E:\\Projects\\opengl_Renderer\\opengl_renderer\\shadowmap.frag",
+              "RelativeToolTip": "shadowmap.frag",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.001001|",
+              "WhenOpened": "2026-09-30T13:07:37.914Z"
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 3,
+              "Title": "shadowmap.vert",
+              "DocumentMoniker": "E:\\Projects\\opengl_Renderer\\opengl_renderer\\shadowmap.vert",
+              "RelativeDocumentMoniker": "shadowmap.vert",
+              "ToolTip": "E:\\Projects\\opengl_Renderer\\opengl_renderer\\shadowmap.vert",
+              "RelativeToolTip": "shadowmap.vert",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.001001|",
+              "WhenOpened": "2026-09-30T13:07:37.104Z"
+            }
+          ]
+        }
+      ]
+=======
       "DocumentGroups": []
+>>>>>>> parent of 8ebbb84 (Master Update 30-09-2026)
     }
   ]
 }

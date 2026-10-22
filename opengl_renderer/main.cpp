@@ -1,4 +1,7 @@
 #include "model.h"
+#include "ShadowMap.h"
+
+const GLuint SHADOW_UNIT = 8;				// texture unit for the shadow map (material textures use 0,1,2...)
 
 const unsigned int width = 900;				//width of the screen
 const unsigned int height = 900;			//height of the screen
@@ -58,10 +61,10 @@ int main()
 {
 	glfwInit();   //initalize GLFW 
 	
-	glfwInitHint(GLFW_CONTEXT_VERSION_MAJOR, 3);    //tell GLFW version of OpenGL we are using 
-	glfwInitHint(GLFW_CONTEXT_VERSION_MINOR, 3);	//which is 3 in our case
+	glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);    //tell GLFW version of OpenGL we are using 
+	glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);	    //which is 3 in our case
 	
-	glfwInitHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);   //tell GLFW we are using "CORE" profile 
+	glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);   //tell GLFW we are using "CORE" profile 
 																//which means we are only using morden functions
 
 	GLFWwindow* window = glfwCreateWindow(width, height, "OpenGl window title", NULL, NULL);  //creatig window size 1280x720 and its name
@@ -79,15 +82,16 @@ int main()
 	Shader framebufferProgram("framebuffer.vert", "framebuffer.frag");
 	Shader shadowMapProgram("shadowmap.vert", "shadowmap.frag");
 
-	// Spotlight parameters
-	glm::vec3 lightPos = glm::vec3(0.5f, 1.5f, 0.5f);
-	glm::vec3 lightDirection = glm::vec3(0.0f, -1.0f, 0.0f);  // pointing straight down; change to aim it
-	glm::vec4 lightColor = glm::vec4(0.9f, 0.9f, 0.9f, 1.0f);
+	// Directional light (the "sun" of the factory). lightPos is only used to place the little debug cube.
+	glm::vec3 lightPos = glm::vec3(1.5f, 3.0f, 1.0f);
+	glm::vec3 lightTarget = glm::vec3(0.0f, 0.5f, 0.0f);
+	glm::vec3 lightDirection = glm::normalize(lightTarget - lightPos);	// direction the rays travel
+	glm::vec4 lightColor = glm::vec4(1.0f, 0.97f, 0.9f, 1.0f);
 
 	shaderProgram.Activate();
 	glUniform4f(glGetUniformLocation(shaderProgram.ID, "lightColor"), lightColor.x, lightColor.y, lightColor.z, lightColor.w);
-	glUniform3f(glGetUniformLocation(shaderProgram.ID, "lightPos"), lightPos.x, lightPos.y, lightPos.z);
 	glUniform3f(glGetUniformLocation(shaderProgram.ID, "lightDirection"), lightDirection.x, lightDirection.y, lightDirection.z);
+	glUniform1f(glGetUniformLocation(shaderProgram.ID, "shadowBias"), 0.0005f);
 	skyboxShader.Activate();
 	glUniform1i(glGetUniformLocation(skyboxShader.ID, "skybox"), 0);
 	framebufferProgram.Activate();
@@ -128,11 +132,6 @@ int main()
 	lightVBO.Unbind();
 	lightEBO.Unbind();
 
-	shaderProgram.Activate();
-	glUniform4f(glGetUniformLocation(shaderProgram.ID, "lightColor"), lightColor.x, lightColor.y, lightColor.z, lightColor.w);
-	glUniform3f(glGetUniformLocation(shaderProgram.ID, "lightPos"), lightPos.x, lightPos.y, lightPos.z);
-
-
 	glEnable(GL_DEPTH_TEST);			// Enables the Depth Buffer
 
 	glEnable(GL_FRAMEBUFFER_SRGB);
@@ -141,9 +140,30 @@ int main()
 	glCullFace(GL_BACK);
 	glFrontFace(GL_CCW);
 
-	Camera camera(width, height, glm::vec3(0.0f, 0.0f, 2.0f)); // Creates camera object
+	
 
-	model _model("F:/Rahul30.12.2020/openGL/Graphics/models/lowpoly_char/scene.gltf");
+	Camera camera(width, height, glm::vec3(0.0f, 0.8f, 2.5f)); // Creates camera object
+
+	// Any format Assimp supports works here (gltf, glb, fbx, obj, dae, stl...).ETC
+	// Relative to the working directory, same as the shader files.
+	model robot("models/floor.fbx");								//<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
+	robot.FitToUnitSize(1.0f);		// 1 unit tall/wide, standing on y = 0  
+	// robot.PrintHierarchy();		// prints the node tree
+
+	// Ground plane so shadows have something to land on
+	std::vector<Vertex> groundVerts =
+	{
+		Vertex{ glm::vec3(-3.0f, 0.0f,  3.0f), glm::vec3(0.0f, 1.0f, 0.0f), glm::vec3(1.0f), glm::vec2(0.0f, 0.0f) },
+		Vertex{ glm::vec3( 3.0f, 0.0f,  3.0f), glm::vec3(0.0f, 1.0f, 0.0f), glm::vec3(1.0f), glm::vec2(1.0f, 0.0f) },
+		Vertex{ glm::vec3( 3.0f, 0.0f, -3.0f), glm::vec3(0.0f, 1.0f, 0.0f), glm::vec3(1.0f), glm::vec2(1.0f, 1.0f) },
+		Vertex{ glm::vec3(-3.0f, 0.0f, -3.0f), glm::vec3(0.0f, 1.0f, 0.0f), glm::vec3(1.0f), glm::vec2(0.0f, 1.0f) }
+	};
+	std::vector<GLuint> groundIndices = { 0, 1, 2,  0, 2, 3 };
+	std::vector<Texture> groundTextures;
+	Material groundMaterial;
+	groundMaterial.baseColor = glm::vec4(0.45f, 0.47f, 0.50f, 1.0f);
+	groundMaterial.specularStrength = 0.05f;
+	mesh ground(groundVerts, groundIndices, groundTextures, groundMaterial);
 
 	unsigned int rectVAO, rectVBO;
 	glGenVertexArrays(1, &rectVAO);
@@ -228,7 +248,7 @@ int main()
 	}
 
 
-	//frameBuffer
+	//frameBuffer //
 	unsigned int FBO;
 	glGenFramebuffers(1, &FBO);
 	glBindFramebuffer(GL_FRAMEBUFFER, FBO);
@@ -249,40 +269,21 @@ int main()
 	glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH24_STENCIL8, width, height);
 	glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT, GL_RENDERBUFFER, RBO);
 
-	//-------------------------------------------------------------------------//
+	//---------------------------------------------------------------//
 	//ERROR CHECK
 		auto fboStatus = glCheckFramebufferStatus(GL_FRAMEBUFFER);
 		if (fboStatus != GL_FRAMEBUFFER_COMPLETE)
 			std::cout << "FRAME_ERROR: " << fboStatus << std::endl;
-	//-------------------------------------------------------------------------//
+	//---------------------------------------------------------------//
 
 
-	unsigned int shadowMapFBO;
-	glGenFramebuffers(1, &shadowMapFBO);
-	
-	unsigned int shadowMapWidth = 2048, shadowMapHeight = 2048;
-	unsigned int shadowMap;
-	glGenTextures(1, &shadowMap);
-	glBindTexture(GL_TEXTURE_2D, shadowMap);
-	glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT, shadowMapWidth, shadowMapHeight, 0, GL_DEPTH_COMPONENT, GL_FLOAT, NULL);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_BORDER);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_BORDER);
-	float clampColor[] = { 1.0f, 1.0f, 1.0f, 1.0f };
-	glTexParameterfv(GL_TEXTURE_2D, GL_TEXTURE_BORDER_COLOR, clampColor);
-	glBindFramebuffer(GL_FRAMEBUFFER, shadowMapFBO);
-	glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, shadowMap, 0);
-	glDrawBuffer(GL_NONE);
-	glReadBuffer(GL_NONE);
-	glBindFramebuffer(GL_FRAMEBUFFER, 0);
-
-	glm::mat4 orthgonalProjection = glm::ortho(-35.0f, 35.0f, -35.0f, 35.0f, 0.1f, 75.0f);
-	glm::mat4 lightView = glm::lookAt(20.0f * lightPos, glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 1.0f, 0.0f));
-	glm::mat4 lightProjection = orthgonalProjection * lightView;
-
-	
-
+	// Shadow map: 2048^2 depth texture. The light frustum is fitted around the model ONCE with some margin
+	// (so it also covers the model when joints move) - keeping the radius constant keeps shadow edges from shimmering
+	ShadowMap shadowMap(2048);
+	glm::vec3 boundsMin, boundsMax;
+	robot.GetBounds(boundsMin, boundsMax);
+	glm::vec3 sceneCentre = 0.5f * (boundsMin + boundsMax);
+	float sceneRadius = 0.5f * glm::length(boundsMax - boundsMin) * 1.25f;
 
 	//MAIN WHILE LOOP
 	while(!glfwWindowShouldClose(window))
@@ -301,14 +302,13 @@ int main()
 			counter = 0;
 		}
 
-		glEnable(GL_DEPTH_TEST);
-		glViewport(0, 0, width, height);
-		glBindFramebuffer(GL_FRAMEBUFFER, shadowMapFBO);
-		glClear(GL_DEPTH_BUFFER_BIT);
-		_model.Draw(shadowMapProgram, camera, 0.2f);
-		glBindFramebuffer(GL_FRAMEBUFFER, 0);
-
-
+		// ---- shadow pass: render the scene's depth as seen from the light ----
+		shadowMap.UpdateDirectional(lightDirection, sceneCentre, sceneRadius);
+		shadowMap.Begin();
+		shadowMapProgram.Activate();
+		glUniformMatrix4fv(glGetUniformLocation(shadowMapProgram.ID, "lightSpaceMatrix"), 1, GL_FALSE, glm::value_ptr(shadowMap.lightSpace));
+		robot.DrawDepth(shadowMapProgram);
+		shadowMap.End();				// restores the previous framebuffer + viewport
 
 		glBindFramebuffer(GL_FRAMEBUFFER, FBO);
 
@@ -331,13 +331,15 @@ int main()
 		lightVAO.Bind();
 		glDrawElements(GL_TRIANGLES, lightIndices.size(), GL_UNSIGNED_INT, 0);
 
+		// ---- colour pass ----
 		shaderProgram.Activate();
-		glUniformMatrix4fv(glGetUniformLocation(shaderProgram.ID, "lightProjection"), 1, GL_FALSE, glm::value_ptr(lightProjection));
-		glActiveTexture(GL_TEXTURE0 + 2);
-		glBindTexture(GL_TEXTURE_2D, shadowMap);
-		glUniform1i(glGetUniformLocation(shaderProgram.ID, "shadowMap"), 2);
+		glUniformMatrix4fv(glGetUniformLocation(shaderProgram.ID, "lightSpaceMatrix"), 1, GL_FALSE, glm::value_ptr(shadowMap.lightSpace));
+		glUniform1f(glGetUniformLocation(shaderProgram.ID, "shadowTexelWorld"), shadowMap.WorldTexelSize());
+		shadowMap.Bind(SHADOW_UNIT);
+		glUniform1i(glGetUniformLocation(shaderProgram.ID, "shadowMap"), SHADOW_UNIT);
 
-		_model.Draw(shaderProgram, camera, 0.2f);
+		ground.Draw(shaderProgram, camera, glm::mat4(1.0f));
+		robot.Draw(shaderProgram, camera);
 
 		glDepthFunc(GL_LEQUAL);
 		glDisable(GL_CULL_FACE);

@@ -1,504 +1,361 @@
-#include"model.h"
+#include "model.h"
+#include <iostream>
+#include <algorithm>
+#include <limits>
+#include <cctype>
 
-model::model(const char* file)
+// Assimp's UV convention has (0,0) at the bottom-left, same as OpenGL, and Texture.cpp flips.
+// If textures look upsidedown on model flip this and only this one to true.
+static const bool FLIP_UVS = false;
+
+// glTF stores image paths as URIs ("Material%20Colors.jpg"); Assimp passes them through still encoded.
+static std::string uriDecode(const std::string& in)
 {
-	std::string text = get_file_contents(file);
-	JSON = json::parse(text);
-
-	model::file = file;
-	data = getData();
-
-	traverseNode(0);
+	std::string out;
+	out.reserve(in.size());
+	for (size_t i = 0; i < in.size(); i++)
+	{
+		if (in[i] == '%' && i + 2 < in.size() && isxdigit((unsigned char)in[i + 1]) && isxdigit((unsigned char)in[i + 2]))
+		{
+			out += (char)std::stoi(in.substr(i + 1, 2), nullptr, 16);
+			i += 2;
+		}
+		else out += in[i];
+	}
+	return out;
 }
 
-void model::Draw(Shader& shader, Camera& camera, float sizeScale)
+static glm::mat4 toGlm(const aiMatrix4x4& m)
 {
-	for (unsigned int i = 0; i < meshes.size(); i++)
-	{
-		meshes[i].mesh::Draw(
-			shader,
-			camera,
-			matricesMeshes[i],
-			glm::vec3(0.0f, 0.0f, 0.0f),   // translation
-			glm::quat(1.0f, 0.0f, 0.0f, 0.0f), // rotation
-			glm::vec3(sizeScale)           // <- your 0-1 size control
-		);
-	}
+	// Assimp is row-major, glm is column-major (constructor takes column by column)
+	return glm::mat4(
+		m.a1, m.b1, m.c1, m.d1,
+		m.a2, m.b2, m.c2, m.d2,
+		m.a3, m.b3, m.c3, m.d3,
+		m.a4, m.b4, m.c4, m.d4);
 }
 
-void model::loadMesh(unsigned int indMesh)
+model::model(const std::string& file)
 {
-	std::cout << "\n========================================\n";
-	std::cout << "LOADING MESH: " << indMesh << "\n";
-	std::cout << "========================================\n";
+	Assimp::Importer importer;
 
-	json primitive = JSON["meshes"][indMesh]["primitives"][0];
+	// FBX files often come with helper "$AssimpFbx$" pivot nodes; collapse them so joint names stay clean.
+	importer.SetPropertyBool(AI_CONFIG_IMPORT_FBX_PRESERVE_PIVOTS, false);
 
-	std::cout << "POSITION = "
-		<< primitive["attributes"]["POSITION"]
-		<< " | type = "
-		<< primitive["attributes"]["POSITION"].type_name()
-		<< "\n";
+	unsigned int flags =
+		aiProcess_Triangulate |				// everything becomes triangles
+		aiProcess_GenSmoothNormals |		// only generates normals for meshes that have none
+		aiProcess_JoinIdenticalVertices |	// gives us a real index buffer
+		aiProcess_ImproveCacheLocality |	// GPU vertex-cache friendly index order
+		aiProcess_SortByPType |				// separates triangles from stray lines/points
+		aiProcess_GenUVCoords |				// turns non-UV mappings (spherical...) into UVs
+		aiProcess_RemoveRedundantMaterials |
+		aiProcess_FindInvalidData;
+	if (FLIP_UVS) flags |= aiProcess_FlipUVs;
+	// NOTE: deliberately NOT using aiProcess_PreTransformVertices / aiProcess_OptimizeGraph:
+	// they bake or merge the node hierarchy, which would destroy the robot joints.
 
-	std::cout << "NORMAL = "
-		<< primitive["attributes"]["NORMAL"]
-		<< " | type = "
-		<< primitive["attributes"]["NORMAL"].type_name()
-		<< "\n";
+	const aiScene* scene = importer.ReadFile(file, flags);
 
-	std::cout << "TEXCOORD_0 = "
-		<< primitive["attributes"]["TEXCOORD_0"]
-		<< " | type = "
-		<< primitive["attributes"]["TEXCOORD_0"].type_name()
-		<< "\n";
+	if (!scene || (scene->mFlags & AI_SCENE_FLAGS_INCOMPLETE) || !scene->mRootNode)
+	{
+		std::cout << "[model] Assimp failed to load '" << file << "': " << importer.GetErrorString() << "\n";
+		return;
+	}
 
-	std::cout << "INDICES = "
-		<< primitive["indices"]
-		<< " | type = "
-		<< primitive["indices"].type_name()
-		<< "\n";
+	size_t slash = file.find_last_of("/\\");
+	directory = (slash == std::string::npos) ? "" : file.substr(0, slash + 1);
 
-	unsigned int posAccInd =
-		primitive["attributes"]["POSITION"].get<unsigned int>();
+	meshes.reserve(scene->mNumMeshes);		// keep mesh objects from being copied around while we fill this
+	for (unsigned int i = 0; i < scene->mNumMeshes; i++)
+		meshes.push_back(processMesh(scene, scene->mMeshes[i]));
 
-	unsigned int normalAccInd =
-		primitive["attributes"]["NORMAL"].get<unsigned int>();
+	processNode(scene->mRootNode, -1);
 
-	unsigned int texAccInd =
-		primitive["attributes"]["TEXCOORD_0"].get<unsigned int>();
+	loaded = true;
+	updateWorld();
 
-	unsigned int indAccInd =
-		primitive["indices"].get<unsigned int>();
-
-	std::cout << "POSITION accessor: " << posAccInd << "\n";
-	std::cout << "NORMAL accessor: " << normalAccInd << "\n";
-	std::cout << "TEXCOORD accessor: " << texAccInd << "\n";
-	std::cout << "INDEX accessor: " << indAccInd << "\n";
-
-	std::vector<float> posVec =
-		getFloats(JSON["accessors"][posAccInd]);
-
-	std::cout << "Positions loaded: " << posVec.size() << "\n";
-
-	std::vector<glm::vec3> positions =
-		groupFloatvec3(posVec);
-
-	std::vector<float> normalVec =
-		getFloats(JSON["accessors"][normalAccInd]);
-
-	std::cout << "Normals loaded: " << normalVec.size() << "\n";
-
-	std::vector<glm::vec3> normals =
-		groupFloatvec3(normalVec);
-
-	std::vector<float> texVec =
-		getFloats(JSON["accessors"][texAccInd]);
-
-	std::cout << "UVs loaded: " << texVec.size() << "\n";
-
-	std::vector<glm::vec2> texUVs =
-		groupFloatvec2(texVec);
-
-	std::vector<Vertex> vertices =
-		assmebleVertices(positions, normals, texUVs);
-
-	std::cout << "Vertices created: "
-		<< vertices.size()
-		<< "\n";
-
-	std::vector<GLuint> indices =
-		getIndices(JSON["accessors"][indAccInd]);
-
-	std::cout << "Indices loaded: "
-		<< indices.size()
-		<< "\n";
-
-	std::vector<Texture> textures =
-		getTextures();
-
-	std::cout << "Textures loaded: "
-		<< textures.size()
-		<< "\n";
-
-	meshes.push_back(mesh(vertices, indices, textures));
-
-	std::cout << "MESH COMPLETE\n";
+	std::cout << "[model] Loaded '" << file << "': "
+		<< meshes.size() << " meshes, " << nodes.size() << " nodes, "
+		<< textureCache.size() << " textures\n";
 }
 
-void model::traverseNode(unsigned int nextNode, glm::mat4 matrix)
+// ------------------------------------------------------------------------------------------
+// Import
+// ------------------------------------------------------------------------------------------
+
+int model::processNode(const aiNode* aNode, int parent)
 {
-	std::cout << "\n========================================\n";
-	std::cout << "ENTERING NODE: " << nextNode << "\n";
-	std::cout << "========================================\n";
+	int index = (int)nodes.size();
+	nodes.emplace_back();
 
-	json node = JSON["nodes"][nextNode];
+	// (don't hold a Node& across the recursion below, the vector may reallocate)
+	nodes[index].name = aNode->mName.C_Str();
+	nodes[index].parent = parent;
+	nodes[index].bindLocal = toGlm(aNode->mTransformation);
+	nodes[index].local = nodes[index].bindLocal;
+	for (unsigned int i = 0; i < aNode->mNumMeshes; i++)
+		nodes[index].meshIndices.push_back(aNode->mMeshes[i]);
 
-	std::cout << "NODE JSON:\n";
-	std::cout << node.dump(4) << "\n";
+	// Node names are how joints are addressed. If a name is duplicated, the first one wins.
+	nodeByName.emplace(nodes[index].name, index);
 
-	glm::vec3 translation = glm::vec3(0.0f, 0.0f, 0.0f);
-
-	if (node.find("translation") != node.end())
+	for (unsigned int i = 0; i < aNode->mNumChildren; i++)
 	{
-		std::cout << "Found translation\n";
-
-		float transValues[3];
-
-		for (unsigned int i = 0; i < node["translation"].size(); i++)
-		{
-			std::cout << "translation[" << i << "] = "
-				<< node["translation"][i]
-				<< " | type = "
-				<< node["translation"][i].type_name()
-				<< "\n";
-
-			transValues[i] = node["translation"][i].get<float>();
-		}
-
-		translation = glm::make_vec3(transValues);
+		int child = processNode(aNode->mChildren[i], index);
+		nodes[index].children.push_back(child);
 	}
-
-	glm::quat rotation = glm::quat(1.0f, 0.0f, 0.0f, 0.0f);
-
-	if (node.find("rotation") != node.end())
-	{
-		std::cout << "Found rotation\n";
-
-		float rotValues[4] =
-		{
-			node["rotation"][3].get<float>(),
-			node["rotation"][0].get<float>(),
-			node["rotation"][1].get<float>(),
-			node["rotation"][2].get<float>()
-		};
-
-		rotation = glm::make_quat(rotValues);
-	}
-
-	glm::vec3 scale = glm::vec3(1.0f, 1.0f, 1.0f);
-
-	if (node.find("scale") != node.end())
-	{
-		std::cout << "Found scale\n";
-
-		float scaleValues[3];
-
-		for (unsigned int i = 0; i < node["scale"].size(); i++)
-		{
-			std::cout << "scale[" << i << "] = "
-				<< node["scale"][i]
-				<< " | type = "
-				<< node["scale"][i].type_name()
-				<< "\n";
-
-			scaleValues[i] = node["scale"][i].get<float>();
-		}
-
-		scale = glm::make_vec3(scaleValues);
-	}
-
-	glm::mat4 matNode = glm::mat4(1.0f);
-
-	if (node.find("matrix") != node.end())
-	{
-		std::cout << "Found matrix\n";
-
-		float matValues[16];
-
-		for (unsigned int i = 0; i < node["matrix"].size(); i++)
-		{
-			std::cout << "matrix[" << i << "] = "
-				<< node["matrix"][i]
-				<< " | type = "
-				<< node["matrix"][i].type_name()
-				<< "\n";
-
-			matValues[i] = node["matrix"][i].get<float>();
-		}
-
-		matNode = glm::make_mat4(matValues);
-	}
-
-	glm::mat4 trans = glm::mat4(1.0f);
-	glm::mat4 rot = glm::mat4(1.0f);
-	glm::mat4 sca = glm::mat4(1.0f);
-
-	trans = glm::translate(trans, translation);
-	rot = glm::mat4_cast(rotation);
-	sca = glm::scale(sca, scale);
-
-	glm::mat4 matNextNode = matrix * matNode * trans * rot * sca;
-
-	if (node.find("mesh") != node.end())
-	{
-		std::cout << "Node has mesh: "
-			<< node["mesh"]
-			<< "\n";
-
-		translationsMeshes.push_back(translation);
-		rotationsMeshes.push_back(rotation);
-		scalesMeshes.push_back(scale);
-		matricesMeshes.push_back(matNextNode);
-
-		std::cout << "Calling loadMesh()...\n";
-
-		loadMesh(node["mesh"]);
-
-		std::cout << "loadMesh() completed.\n";
-	}
-
-	if (node.find("children") != node.end())
-	{
-		std::cout << "Children count: "
-			<< node["children"].size()
-			<< "\n";
-
-		for (unsigned int i = 0; i < node["children"].size(); i++)
-		{
-			std::cout << "Going to child: "
-				<< node["children"][i]
-				<< "\n";
-
-			traverseNode(node["children"][i], matNextNode);
-		}
-	}
-
-	std::cout << "FINISHED NODE: " << nextNode << "\n";
+	return index;
 }
 
-std::vector<unsigned char> model::getData()
-{
-	std::string bytesText;
-	std::string uri = JSON["buffers"][0]["uri"];
-
-	std::string fileStr = std::string(file);
-	std::string fileDirectory = fileStr.substr(0, fileStr.find_last_of('/') + 1);
-	bytesText = get_file_contents((fileDirectory + uri).c_str());
-
-	std::vector<unsigned char> data(bytesText.begin(), bytesText.end());
-	return data;
-}
-
-std::vector<float> model::getFloats(json accessor)
-{
-	std::vector<float> floatVec;
-
-	unsigned int bufferViewInd = accessor.value("bufferView", 1);
-	unsigned int count = accessor["count"];
-	unsigned int accByteOffset = accessor.value("byteOffset", 0);
-	std::string type = accessor["type"];
-
-	json bufferView = JSON["bufferViews"][bufferViewInd];
-
-	// FIX: byteOffset is optional in glTF
-	unsigned int byteOffset = bufferView.value("byteOffset", 0);
-
-	unsigned int numPerVert;
-
-	if (type == "SCALAR")
-		numPerVert = 1;
-	else if (type == "VEC2")
-		numPerVert = 2;
-	else if (type == "VEC3")
-		numPerVert = 3;
-	else if (type == "VEC4")
-		numPerVert = 4;
-	else
-		throw std::invalid_argument("TYPE INVALID NOT SCALAR/VEC2/VEC3/VEC4");
-
-	unsigned int beginningOfData = byteOffset + accByteOffset;
-	unsigned int lengthOfData = count * 4 * numPerVert;
-
-	for (unsigned int i = beginningOfData;
-		i < beginningOfData + lengthOfData;
-		i += 4)
-	{
-		unsigned char byte[] =
-		{
-			data[i],
-			data[i + 1],
-			data[i + 2],
-			data[i + 3]
-		};
-
-		float value;
-
-		std::memcpy(&value, byte, sizeof(float));
-
-		floatVec.push_back(value);
-	}
-
-	return floatVec;
-}
-
-std::vector<GLuint> model::getIndices(json accessor)
-{
-	std::vector<GLuint> indices;
-
-	unsigned int bufferViewInd = accessor.value("bufferView", 0);
-	unsigned int count = accessor["count"];
-	unsigned int accByteOffset = accessor.value("byteOffset", 0);
-	unsigned int componentType = accessor["componentType"];
-
-	json bufferView = JSON["bufferViews"][bufferViewInd];
-
-	// FIX: byteOffset is optional in glTF
-	unsigned int byteOffset = bufferView.value("byteOffset", 0);
-
-	unsigned int beginningOfData = byteOffset + accByteOffset;
-
-	if (componentType == 5125)
-	{
-		for (unsigned int i = beginningOfData;
-			i < byteOffset + accByteOffset + count * 4;
-			i += 4)
-		{
-			unsigned char byte[] =
-			{
-				data[i],
-				data[i + 1],
-				data[i + 2],
-				data[i + 3]
-			};
-
-			unsigned int value;
-
-			std::memcpy(&value, byte, sizeof(unsigned int));
-
-			indices.push_back((GLuint)value);
-		}
-	}
-	else if (componentType == 5123)
-	{
-		for (unsigned int i = beginningOfData;
-			i < byteOffset + accByteOffset + count * 2;
-			i += 2)
-		{
-			unsigned char byte[] =
-			{
-				data[i],
-				data[i + 1]
-			};
-
-			unsigned short value;
-
-			std::memcpy(&value, byte, sizeof(unsigned short));
-
-			indices.push_back(GLuint(value));
-		}
-	}
-	else if (componentType == 5122)
-	{
-		for (unsigned int i = beginningOfData;
-			i < byteOffset + accByteOffset + count * 2;
-			i += 2)
-		{
-			unsigned char byte[] =
-			{
-				data[i],
-				data[i + 1]
-			};
-
-			short value;
-
-			std::memcpy(&value, byte, sizeof(short));
-
-			indices.push_back(GLuint(value));
-		}
-	}
-
-	return indices;
-}
-
-std::vector<Texture> model::getTextures()
-{
-	std::vector<Texture> textures;
-
-	std::string fileStr = std::string(file);
-	std::string fileDirectory = fileStr.substr(0, fileStr.find_last_of('/') + 1);
-
-
-	for (unsigned int i = 0; i < JSON["images"].size(); i++)
-	{
-		std::string texPath = JSON["images"][i]["uri"];
-
-		bool skip = false;
-		for (unsigned int j = 0; j < loadedTexName.size(); j++)
-		{
-			if (loadedTexName[j] == texPath)
-			{
-				textures.push_back(loadedTex[j]);
-				skip = true;
-				break;
-			}
-		}
-
-		if (!skip)
-		{
-			if (texPath.find("baseColor") != std::string::npos)
-			{
-				Texture diffuse = Texture((fileDirectory + texPath).c_str(), "diffuse", loadedTex.size());
-				textures.push_back(diffuse);
-				loadedTex.push_back(diffuse);
-				loadedTexName.push_back(texPath);
-			}
-			else if (texPath.find("metallicRoughness") != std::string::npos)
-			{
-				Texture specular = Texture((fileDirectory + texPath).c_str(), "specular", loadedTex.size());
-				textures.push_back(specular);
-				loadedTex.push_back(specular);
-				loadedTexName.push_back(texPath);
-			}
-		}
-	}
-	return textures;
-}
-
-std::vector<Vertex> model::assmebleVertices
-(
-	std::vector<glm::vec3> positions,
-	std::vector<glm::vec3> normals,
-	std::vector<glm::vec2> texUVs
-)
+mesh model::processMesh(const aiScene* scene, const aiMesh* aMesh)
 {
 	std::vector<Vertex> vertices;
-	for (int i = 0; i < positions.size(); i++)
+	std::vector<GLuint> indices;
+	std::vector<Texture> textures;
+	Material material;
+
+	// --- vertices ---
+	vertices.reserve(aMesh->mNumVertices);
+	for (unsigned int i = 0; i < aMesh->mNumVertices; i++)
 	{
-		vertices.push_back
-		(
-			Vertex
-			{
-				positions[i],
-				normals[i],
-				glm::vec3(1.0f, 1.0f, 1.0f),
-				texUVs[i]
-			}
-		);
+		Vertex v;
+		v.position = glm::vec3(aMesh->mVertices[i].x, aMesh->mVertices[i].y, aMesh->mVertices[i].z);
+
+		v.normal = aMesh->HasNormals()
+			? glm::vec3(aMesh->mNormals[i].x, aMesh->mNormals[i].y, aMesh->mNormals[i].z)
+			: glm::vec3(0.0f, 1.0f, 0.0f);
+
+		// per-vertex colour channel if the file has one, otherwise white
+		v.color = aMesh->HasVertexColors(0)
+			? glm::vec3(aMesh->mColors[0][i].r, aMesh->mColors[0][i].g, aMesh->mColors[0][i].b)
+			: glm::vec3(1.0f);
+
+		v.textUV = aMesh->HasTextureCoords(0)
+			? glm::vec2(aMesh->mTextureCoords[0][i].x, aMesh->mTextureCoords[0][i].y)
+			: glm::vec2(0.0f);
+
+		vertices.push_back(v);
 	}
-	return vertices;
+
+	// --- indices ---
+	indices.reserve(aMesh->mNumFaces * 3);
+	for (unsigned int f = 0; f < aMesh->mNumFaces; f++)
+	{
+		const aiFace& face = aMesh->mFaces[f];
+		if (face.mNumIndices != 3) continue;	// lines/points (SortByPType keeps them apart, we just skip them)
+		for (unsigned int j = 0; j < 3; j++)
+			indices.push_back(face.mIndices[j]);
+	}
+
+	// --- material ---
+	if (aMesh->mMaterialIndex < scene->mNumMaterials)
+	{
+		const aiMaterial* mat = scene->mMaterials[aMesh->mMaterialIndex];
+
+		aiColor4D c;
+		if (mat->Get(AI_MATKEY_BASE_COLOR, c) == AI_SUCCESS)			// glTF / PBR base colour factor
+			material.baseColor = glm::vec4(c.r, c.g, c.b, c.a);
+		else if (mat->Get(AI_MATKEY_COLOR_DIFFUSE, c) == AI_SUCCESS)	// OBJ/FBX/DAE diffuse colour
+			material.baseColor = glm::vec4(c.r, c.g, c.b, c.a);
+
+		float shininess;
+		if (mat->Get(AI_MATKEY_SHININESS, shininess) == AI_SUCCESS && shininess > 1.0f)
+			material.shininess = std::min(shininess, 256.0f);
+
+		// Base colour: newer Assimp reports glTF as BASE_COLOR, older formats as DIFFUSE
+		loadMaterialTextures(scene, mat, aiTextureType_BASE_COLOR, "diffuse", true, textures);
+		if (textures.empty())
+			loadMaterialTextures(scene, mat, aiTextureType_DIFFUSE, "diffuse", true, textures);
+		loadMaterialTextures(scene, mat, aiTextureType_SPECULAR, "specular", false, textures);
+	}
+
+	return mesh(vertices, indices, textures, material);
 }
 
-std::vector < glm::vec2> model::groupFloatvec2(std::vector<float> floatVec)
+void model::loadMaterialTextures(const aiScene* scene, const aiMaterial* mat, aiTextureType aiType,
+	const char* typeName, bool srgb, std::vector<Texture>& out)
 {
-	std::vector<glm::vec2> vectors;
-	for (int i = 0; i < floatVec.size(); i)
-		vectors.push_back(glm::vec2(floatVec[i++], floatVec[i++]));	
-	
-	return vectors;
-}
-std::vector < glm::vec3> model::groupFloatvec3(std::vector<float> floatVec)
-{
-	std::vector<glm::vec3> vectors;
-	for (int i = 0; i < floatVec.size(); i)
-		vectors.push_back(glm::vec3(floatVec[i++], floatVec[i++], floatVec[i++]));
+	if (mat->GetTextureCount(aiType) == 0) return;
 
-	return vectors;
-}
-std::vector < glm::vec4> model::groupFloatvec4(std::vector<float> floatVec)
-{
-	std::vector<glm::vec4> vectors;
-	for (int i = 0; i < floatVec.size(); i)
-		vectors.push_back(glm::vec4(floatVec[i++], floatVec[i++], floatVec[i++], floatVec[i++]));
+	aiString path;
+	if (mat->GetTexture(aiType, 0, &path) != AI_SUCCESS) return;	// (first texture of this type only, for now)
 
-	return vectors;
+	std::string key = std::string(path.C_Str()) + "|" + typeName;
+	auto cached = textureCache.find(key);
+	if (cached != textureCache.end())
+	{
+		out.push_back(cached->second);
+		return;
+	}
+
+	// 1) texture embedded inside the file (.glb, some .fbx): Assimp names it "*0", "*1", ...
+	if (const aiTexture* embedded = scene->GetEmbeddedTexture(path.C_Str()))
+	{
+		if (embedded->mHeight == 0)
+		{
+			// compressed (png/jpg bytes); mWidth is the byte length
+			Texture t = Texture::FromEncodedMemory(
+				reinterpret_cast<const unsigned char*>(embedded->pcData), (int)embedded->mWidth, typeName, srgb);
+			textureCache.emplace(key, t);
+			out.push_back(t);
+		}
+		else
+		{
+			// raw texels, stored as BGRA -> reorder to RGBA
+			std::vector<unsigned char> rgba(embedded->mWidth * embedded->mHeight * 4);
+			for (unsigned int i = 0; i < embedded->mWidth * embedded->mHeight; i++)
+			{
+				rgba[i * 4 + 0] = embedded->pcData[i].r;
+				rgba[i * 4 + 1] = embedded->pcData[i].g;
+				rgba[i * 4 + 2] = embedded->pcData[i].b;
+				rgba[i * 4 + 3] = embedded->pcData[i].a;
+			}
+			Texture t = Texture::FromPixels(rgba.data(), (int)embedded->mWidth, (int)embedded->mHeight, 4, typeName, srgb);
+			textureCache.emplace(key, t);
+			out.push_back(t);
+		}
+		return;
+	}
+
+	// 2) external image file next to the model
+	std::string rel = uriDecode(path.C_Str());
+	std::replace(rel.begin(), rel.end(), '\\', '/');		// Windows-authored paths
+	Texture t((directory + rel).c_str(), typeName, srgb);
+	textureCache.emplace(key, t);
+	out.push_back(t);
+}
+
+// ------------------------------------------------------------------------------------------
+// Scene graph
+// ------------------------------------------------------------------------------------------
+
+void model::updateWorld()
+{
+	// nodes are stored parent-first, so one linear pass is enough
+	for (size_t i = 0; i < nodes.size(); i++)
+	{
+		nodes[i].world = (nodes[i].parent < 0)
+			? nodes[i].local
+			: nodes[nodes[i].parent].world * nodes[i].local;
+	}
+	worldDirty = false;
+}
+
+bool model::HasNode(const std::string& name) const
+{
+	return nodeByName.find(name) != nodeByName.end();
+}
+
+bool model::SetNodeLocalTransform(const std::string& name, const glm::mat4& local)
+{
+	auto it = nodeByName.find(name);
+	if (it == nodeByName.end()) return false;
+	nodes[it->second].local = local;
+	worldDirty = true;
+	return true;
+}
+
+bool model::SetJointAngle(const std::string& name, const glm::vec3& axis, float radians)
+{
+	auto it = nodeByName.find(name);
+	if (it == nodeByName.end()) return false;
+	Node& n = nodes[it->second];
+	n.local = n.bindLocal * glm::rotate(glm::mat4(1.0f), radians, glm::normalize(axis));
+	worldDirty = true;
+	return true;
+}
+
+void model::ResetPose()
+{
+	for (Node& n : nodes) n.local = n.bindLocal;
+	worldDirty = true;
+}
+
+void model::PrintHierarchy() const
+{
+	if (!nodes.empty()) printNode(0, 0);
+}
+
+void model::printNode(int index, int depth) const
+{
+	const Node& n = nodes[index];
+	std::cout << std::string(depth * 2, ' ') << "- " << (n.name.empty() ? "<unnamed>" : n.name);
+	if (!n.meshIndices.empty()) std::cout << "  [" << n.meshIndices.size() << " mesh]";
+	std::cout << "\n";
+	for (int c : n.children) printNode(c, depth + 1);
+}
+
+// ------------------------------------------------------------------------------------------
+// Drawing
+// ------------------------------------------------------------------------------------------
+
+void model::Draw(Shader& shader, Camera& camera)
+{
+	if (!loaded) return;
+	if (worldDirty) updateWorld();
+
+	for (const Node& n : nodes)
+		for (unsigned int m : n.meshIndices)
+			meshes[m].Draw(shader, camera, transform * n.world);
+}
+
+void model::DrawDepth(Shader& shader)
+{
+	if (!loaded) return;
+	if (worldDirty) updateWorld();
+
+	for (const Node& n : nodes)
+		for (unsigned int m : n.meshIndices)
+			meshes[m].DrawDepth(shader, transform * n.world);
+}
+
+// ------------------------------------------------------------------------------------------
+// Bounds / framing
+// ------------------------------------------------------------------------------------------
+
+void model::GetBounds(glm::vec3& outMin, glm::vec3& outMax)
+{
+	outMin = glm::vec3(std::numeric_limits<float>::max());
+	outMax = glm::vec3(std::numeric_limits<float>::lowest());
+	if (!loaded) { outMin = outMax = glm::vec3(0.0f); return; }
+	if (worldDirty) updateWorld();
+
+	for (const Node& n : nodes)
+	{
+		glm::mat4 M = transform * n.world;
+		for (unsigned int m : n.meshIndices)
+		{
+			const mesh& ms = meshes[m];
+			// transform all 8 corners of the mesh's local box
+			for (int c = 0; c < 8; c++)
+			{
+				glm::vec3 corner(
+					(c & 1) ? ms.boundsMax.x : ms.boundsMin.x,
+					(c & 2) ? ms.boundsMax.y : ms.boundsMin.y,
+					(c & 4) ? ms.boundsMax.z : ms.boundsMin.z);
+				glm::vec3 p = glm::vec3(M * glm::vec4(corner, 1.0f));
+				outMin = glm::min(outMin, p);
+				outMax = glm::max(outMax, p);
+			}
+		}
+	}
+}
+
+void model::FitToUnitSize(float size)
+{
+	transform = glm::mat4(1.0f);
+	glm::vec3 mn, mx;
+	GetBounds(mn, mx);
+
+	glm::vec3 extent = mx - mn;
+	float largest = std::max(extent.x, std::max(extent.y, extent.z));
+	if (largest <= 0.0f) return;
+
+	float s = size / largest;
+	glm::vec3 centre = 0.5f * (mn + mx);
+
+	// move the box's bottom-centre to the origin, then scale
+	transform = glm::scale(glm::mat4(1.0f), glm::vec3(s))
+		* glm::translate(glm::mat4(1.0f), glm::vec3(-centre.x, -mn.y, -centre.z));
 }

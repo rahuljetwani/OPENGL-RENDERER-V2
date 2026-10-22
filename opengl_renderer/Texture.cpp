@@ -1,109 +1,102 @@
 #include"Texture.h"
+#include<iostream>
 
-Texture::Texture(const char* image, const char* texType, GLuint slot)
+// stb flips rows so that (0,0) is the bottom-left corner, matching OpenGL / Assimp UVs.
+// If a model ever shows up upside-down, this is the one switch to check (see model.cpp: FLIP_UVS).
+static const bool FLIP_IMAGES_ON_LOAD = true;
+
+Texture::Texture(const char* file, const char* texType, bool srgb)
 {
-	// Assigns the type of the texture ot the texture object
 	type = texType;
 
-	// Stores the width, height, and the number of color channels of the image
-	int widthImg, heightImg, numColCh;
-	// Flips the image so it appears right side up
-	stbi_set_flip_vertically_on_load(true);
-	// Reads the image from a file and stores it in bytes
-	unsigned char* bytes = stbi_load(image, &widthImg, &heightImg, &numColCh, 0);
+	int w, h, ch;
+	stbi_set_flip_vertically_on_load(FLIP_IMAGES_ON_LOAD);
+	unsigned char* bytes = stbi_load(file, &w, &h, &ch, 0);
+	if (!bytes)
+	{
+		std::cout << "[Texture] FAILED to load '" << file << "': " << stbi_failure_reason() << "\n";
+		// 1x1 magenta so a missing texture is obvious in the viewport instead of a black mesh
+		unsigned char magenta[3] = { 255, 0, 255 };
+		upload(magenta, 1, 1, 3, false);
+		return;
+	}
+	upload(bytes, w, h, ch, srgb);
+	stbi_image_free(bytes);
+}
 
-	// Generates an OpenGL texture object
+Texture Texture::FromEncodedMemory(const unsigned char* bytes, int length, const char* texType, bool srgb)
+{
+	Texture t;
+	t.type = texType;
+
+	int w, h, ch;
+	stbi_set_flip_vertically_on_load(FLIP_IMAGES_ON_LOAD);
+	unsigned char* pixels = stbi_load_from_memory(bytes, length, &w, &h, &ch, 0);
+	if (!pixels)
+	{
+		std::cout << "[Texture] FAILED to decode embedded texture: " << stbi_failure_reason() << "\n";
+		unsigned char magenta[3] = { 255, 0, 255 };
+		t.upload(magenta, 1, 1, 3, false);
+		return t;
+	}
+	t.upload(pixels, w, h, ch, srgb);
+	stbi_image_free(pixels);
+	return t;
+}
+
+Texture Texture::FromPixels(const unsigned char* pixels, int width, int height, int channels, const char* texType, bool srgb)
+{
+	Texture t;
+	t.type = texType;
+	t.upload(pixels, width, height, channels, srgb);
+	return t;
+}
+
+void Texture::upload(const unsigned char* pixels, int w, int h, int channels, bool srgb)
+{
+	GLenum format, internalFormat;
+	switch (channels)
+	{
+	case 1: format = GL_RED;  internalFormat = GL_R8;   break;	// no sRGB single-channel format exists
+	case 2: format = GL_RG;   internalFormat = GL_RG8;  break;
+	case 3: format = GL_RGB;  internalFormat = srgb ? GL_SRGB8        : GL_RGB8;  break;
+	case 4: format = GL_RGBA; internalFormat = srgb ? GL_SRGB8_ALPHA8 : GL_RGBA8; break;
+	default:
+		throw std::invalid_argument("Texture: unsupported channel count");
+	}
+
 	glGenTextures(1, &ID);
-	// Assigns the texture to a Texture Unit
-	glActiveTexture(GL_TEXTURE0 + slot);
-	unit = slot;
 	glBindTexture(GL_TEXTURE_2D, ID);
 
-	// Configures the type of algorithm that is used to make the image smaller or bigger
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST_MIPMAP_LINEAR);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+	// Rows of 1- and 3-channel images are not 4-byte aligned; without this, widths that
+	// are not a multiple of 4 come out sheared.
+	glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+	glTexImage2D(GL_TEXTURE_2D, 0, internalFormat, w, h, 0, format, GL_UNSIGNED_BYTE, pixels);
+	glPixelStorei(GL_UNPACK_ALIGNMENT, 4);
 
-	// Configures the way the texture repeats (if it does at all)
+	// A grayscale image should read as (g,g,g,1) in the shader, not (g,0,0,1)
+	if (channels == 1)
+	{
+		GLint swizzle[4] = { GL_RED, GL_RED, GL_RED, GL_ONE };
+		glTexParameteriv(GL_TEXTURE_2D, GL_TEXTURE_SWIZZLE_RGBA, swizzle);
+	}
+
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
 
-	// Extra lines in case you choose to use GL_CLAMP_TO_BORDER	      - in this image wont repeat the extra space will have this flatColor
-	// float flatColor[] = {1.0f, 1.0f, 1.0f, 1.0f};
-	// glTexParameterfv(GL_TEXTURE_2D, GL_TEXTURE_BORDER_COLOR, flatColor);
-
-	if (numColCh == 4)
-		glTexImage2D(
-
-			GL_TEXTURE_2D,
-			0,
-			GL_SRGB_ALPHA,
-			widthImg,
-			heightImg,
-			0,
-			GL_RGBA,
-			GL_UNSIGNED_BYTE,
-			bytes
-		);
-	else if (numColCh == 3)
-		glTexImage2D(
-
-			GL_TEXTURE_2D,
-			0,
-			GL_SRGB_ALPHA,
-			widthImg,
-			heightImg,
-			0,
-			GL_RGB,
-			GL_UNSIGNED_BYTE,
-			bytes
-		);
-	else if (numColCh == 1)
-		glTexImage2D(
-
-			GL_TEXTURE_2D,
-			0,
-			GL_SRGB_ALPHA,
-			widthImg,
-			heightImg,
-			0,
-			GL_RED,
-			GL_UNSIGNED_BYTE,
-			bytes
-		);
-	else
-	{
-		throw std::invalid_argument("automatic texture type recognition failed");
-	}
-		
-
-
-	// Generates MipMaps
 	glGenerateMipmap(GL_TEXTURE_2D);
-
-	// Deletes the image data as it is already in the OpenGL Texture object
-	stbi_image_free(bytes);
-
-	// Unbinds the OpenGL Texture object so that it can't accidentally be modified
 	glBindTexture(GL_TEXTURE_2D, 0);
 }
 
-void Texture::texUnit(Shader& shader, const char* uniform, GLuint unit)
-{
-	// Gets the location of the uniform
-	GLuint texUni = glGetUniformLocation(shader.ID, uniform);
-	// Shader needs to be activated before changing the value of a uniform
-	shader.Activate();
-	// Sets the value of the uniform
-	glUniform1i(texUni, unit);
-}
-
-void Texture::Bind()
+void Texture::Bind(GLuint unit) const
 {
 	glActiveTexture(GL_TEXTURE0 + unit);
 	glBindTexture(GL_TEXTURE_2D, ID);
 }
 
-void Texture::Unbind()
+void Texture::Unbind() const
 {
 	glBindTexture(GL_TEXTURE_2D, 0);
 }
@@ -111,4 +104,5 @@ void Texture::Unbind()
 void Texture::Delete()
 {
 	glDeleteTextures(1, &ID);
+	ID = 0;
 }

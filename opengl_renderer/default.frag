@@ -1,133 +1,87 @@
 #version 330 core
 
+out vec4 FragColor;
 
-out vec4 FragColor;             // Outputs colors in RGBA
+in vec3 crntPos;
+in vec3 normal;
+in vec3 color;
+in vec2 texCoord;
 
+// material
+uniform sampler2D diffuse0;
+uniform sampler2D specular0;
+uniform vec4  baseColor;
+uniform int   hasDiffuseTex;
+uniform int   hasSpecularTex;
+uniform float shininess;
+uniform float specularStrength;
 
-in vec3 crntPos;                // Imports the current position from the Vertex Shader
-in vec3 normal;                 // Imports the normal from the Vertex Shader
-in vec3 color;                  // Inputs the color from the Vertex Shader
-in vec2 texCoord;               // Inputs the texture coordinates from the Vertex Shader
-in vec4 fragPosLight;
+// light (one directional light)
+uniform vec4 lightColor;
+uniform vec3 lightDirection;        // direction the light rays TRAVEL (pointing away from the light)
+uniform vec3 camPos;
 
+// shadows
+uniform sampler2DShadow shadowMap;  // hardware depth compare (see ShadowMap.cpp)
+uniform mat4  lightSpaceMatrix;
+uniform float shadowTexelWorld;     // size of one shadow texel in world units
+uniform float shadowBias;           // ~0.0005 in [0,1] depth units
 
-uniform sampler2D diffuse0;         // Gets the Texture Unit from the main function
-uniform sampler2D specular0;         // Gets the Texture Unit from the main function
-uniform sampler2D shadowMap; 
-uniform vec4 lightColor;        // Gets the color of the light from the main function
-uniform vec3 lightPos;          // Gets the position of the light from the main function
-uniform vec3 camPos;            // Gets the position of the camera from the main function
-
-
-vec4 directionLight()
+// Returns 0 = fully lit, 1 = fully shadowed
+float shadowAmount(vec3 worldPos, vec3 N, vec3 L)
 {
-    // ambient lighting
-    float ambient = 0.05f;  
-    
-    // diffuse lighting
-    vec3 norm = normalize(normal);
-    vec3 lightDirection = normalize(vec3(1.0f, 1.0f, 0.0f));
-    float diffuse  = max(dot(norm, lightDirection), 0.0f);
-    
-    // specular lighting
-    float specularLight = 0.50f;
-    vec3 viewDirection  = normalize(camPos - crntPos);
-    vec3 reflectionDirection = reflect(-lightDirection, norm);
-    float specAmount = pow(max(dot(viewDirection, reflectionDirection), 0.0f), 20);
-    float specular = specAmount * specularLight;
+    float cosTheta = clamp(dot(N, L), 0.0, 1.0);
+    float sinTheta = sqrt(1.0 - cosTheta * cosTheta);
 
-    float shadow = 0.0f;
-    vec3 lightCoords = fragPosLight.xyz / fragPosLight.w;
-    if(lightCoords.z <= 1.0f)
-    {
-		// Get from [-1, 1] range to [0, 1] range just like the shadow map
-		lightCoords = (lightCoords + 1.0f) / 2.0f;
-		float currentDepth = lightCoords.z;
-		// Prevents shadow acne
-		float bias = max(0.025f * (1.0f - dot(normal, lightDirection)), 0.0005f);
+    // Normal-offset: push the lookup point along the surface normal, more at grazing angles.
+    // Removes acne without the "peter-panning" (floating shadows) a big depth bias causes.
+    vec3 offsetPos = worldPos + N * (shadowTexelWorld * 1.5 * sinTheta);
 
-		// Smoothens out the shadows
-		int sampleRadius = 2;
-		vec2 pixelSize = 1.0 / textureSize(shadowMap, 0);
-		for(int y = -sampleRadius; y <= sampleRadius; y++)
-		{
-		    for(int x = -sampleRadius; x <= sampleRadius; x++)
-		    {
-		        float closestDepth = texture(shadowMap, lightCoords.xy + vec2(x, y) * pixelSize).r;
-				if (currentDepth > closestDepth + bias)
-					shadow += 1.0f;     
-		    }    
-		}
-		// Get average shadow
-		shadow /= pow((sampleRadius * 2 + 1), 2);
+    vec4 lp = lightSpaceMatrix * vec4(offsetPos, 1.0);
+    vec3 p  = lp.xyz / lp.w * 0.5 + 0.5;
 
-	}
+    // Outside the shadow map sideways = lit
+    if (p.x < 0.0 || p.x > 1.0 || p.y < 0.0 || p.y > 1.0)
+        return 0.0;
 
-    return (texture(diffuse0, texCoord) * (diffuse * (1.0f - shadow) + ambient) + texture(specular0, texCoord).r * specular  * (1.0f - shadow)) * lightColor;
-}
+    // Receivers behind the far plane (e.g. a floor far from the light) must still be shadowed by casters,
+    // so clamp the depth instead of skipping the lookup.
+    p.z = min(p.z, 1.0);
 
-vec4 pointLight()
-{
-    vec3 lightVec = lightPos - crntPos;
-    float dist = length(lightVec);
-    float a = 0.08;
-    float b = 0.04;
-    float inten = 1.0f / (a * dist * dist + b * dist + 1.0f);
+    float bias = shadowBias * (1.0 - cosTheta) + shadowBias * 0.25;
 
-    // ambient lighting
-    float ambient = 0.025f;  
-    
-    // diffuse lighting
-    vec3 norm = normalize(normal);
-    vec3 lightDirection = normalize(lightVec);
-    float diffuse  = max(dot(norm, lightDirection), 0.0f);
-    
-    
-    // specular lighting
-    float specular = 0.0f;
-    if(diffuse != 0.0f)
-    {
-        float specularLight = 0.50f;
-        vec3 viewDirection  = normalize(camPos - crntPos);
-        vec3 reflectionDirection = reflect(-lightDirection, norm);
+    // 3x3 PCF; every tap is itself a bilinear comparison, so this is effectively a smooth 4x4 kernel
+    vec2 texel = 1.0 / vec2(textureSize(shadowMap, 0));
+    float lit = 0.0;
+    for (int y = -1; y <= 1; y++)
+        for (int x = -1; x <= 1; x++)
+            lit += texture(shadowMap, vec3(p.xy + vec2(x, y) * texel, p.z - bias));
 
-        vec3 halfWayVec = normalize(viewDirection + lightDirection);
-
-        float specAmount = pow(max(dot(normal, halfWayVec), 0.0f), 20);
-        specular = specAmount * specularLight;
-    };
-    return (texture(diffuse0, texCoord) * lightColor * (diffuse + inten + ambient) + texture(specular0, texCoord).r * specular * inten) * lightColor;
-}
-
-vec4 spotLight()
-{
-    float innerCone = 0.95f;
-    float outerCone = 0.90f;
-    
-    // ambient lighting
-    float ambient = 0.20f;  
-    
-    // diffuse lighting
-    vec3 norm = normalize(normal);
-    vec3 lightDirection = normalize(lightPos - crntPos);
-    float diffuse  = max(dot(norm, lightDirection), 0.0f);
-    
-    // specular lighting
-    float specularLight = 0.50f;
-    vec3 viewDirection  = normalize(camPos - crntPos);
-    vec3 reflectionDirection = reflect(-lightDirection, norm);
-
-    float specAmount = pow(max(dot(viewDirection, reflectionDirection), 0.0f), 20);
-    float specular = specAmount * specularLight;
-
-    float angle = dot(vec3(0.0f, -1.0f, 0.0f), -lightDirection);
-    float inten = clamp((angle - outerCone) / (innerCone - outerCone), 0.0f, 1.f);
-
-    return (texture(diffuse0, texCoord) * lightColor * (diffuse + inten + ambient) + texture(specular0, texCoord).r * specular * inten) * lightColor;
+    return 1.0 - lit / 9.0;
 }
 
 void main()
 {
-    
-    FragColor = directionLight();
+    // --- surface colour ---
+    vec4 albedo = baseColor * vec4(color, 1.0);
+    if (hasDiffuseTex != 0)
+        albedo *= texture(diffuse0, texCoord);
+
+    float specMask = (hasSpecularTex != 0) ? texture(specular0, texCoord).r : specularStrength;
+
+    vec3 N = normalize(normal);
+    vec3 L = normalize(-lightDirection);
+    vec3 V = normalize(camPos - crntPos);
+    vec3 H = normalize(L + V);
+
+    // --- lighting ---
+    float NdotL   = max(dot(N, L), 0.0);
+    float shadow  = shadowAmount(crntPos, N, L);
+
+    vec3 ambient  = albedo.rgb * mix(0.10, 0.25, N.y * 0.5 + 0.5);      // cheap sky/ground ambient
+    vec3 diffuse  = albedo.rgb * NdotL * (1.0 - shadow) * lightColor.rgb;
+    float spec    = (NdotL > 0.0) ? pow(max(dot(N, H), 0.0), shininess) : 0.0;
+    vec3 specular = lightColor.rgb * spec * specMask * (1.0 - shadow);
+
+    FragColor = vec4(ambient + diffuse + specular, albedo.a);
 }
