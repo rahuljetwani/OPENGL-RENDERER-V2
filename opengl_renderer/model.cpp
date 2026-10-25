@@ -1,4 +1,5 @@
 #include "model.h"
+#include "Profiler.h"
 #include <iostream>
 #include <algorithm>
 #include <limits>
@@ -35,8 +36,9 @@ static glm::mat4 toGlm(const aiMatrix4x4& m)
 		m.a4, m.b4, m.c4, m.d4);
 }
 
-model::model(const std::string& file)
+model::model(const std::string& file, bool ignoreNodes)
 {
+	ignoreNodeTransforms = ignoreNodes;
 	Assimp::Importer importer;
 
 	// FBX files often come with helper "$AssimpFbx$" pivot nodes; collapse them so joint names stay clean.
@@ -92,7 +94,8 @@ int model::processNode(const aiNode* aNode, int parent)
 	// (don't hold a Node& across the recursion below, the vector may reallocate)
 	nodes[index].name = aNode->mName.C_Str();
 	nodes[index].parent = parent;
-	nodes[index].bindLocal = toGlm(aNode->mTransformation);
+	// ignoreNodeTransforms: drop the file's scale / rotation / translation, keep the raw mesh at its pivot
+	nodes[index].bindLocal = ignoreNodeTransforms ? glm::mat4(1.0f) : toGlm(aNode->mTransformation);
 	nodes[index].local = nodes[index].bindLocal;
 	for (unsigned int i = 0; i < aNode->mNumMeshes; i++)
 		nodes[index].meshIndices.push_back(aNode->mMeshes[i]);
@@ -162,6 +165,11 @@ mesh model::processMesh(const aiScene* scene, const aiMesh* aMesh)
 		float shininess;
 		if (mat->Get(AI_MATKEY_SHININESS, shininess) == AI_SUCCESS && shininess > 1.0f)
 			material.shininess = std::min(shininess, 256.0f);
+
+		// glTF (and some FBX) carry real metal/roughness factors; formats without them keep the defaults
+		float factor;
+		if (mat->Get(AI_MATKEY_METALLIC_FACTOR, factor) == AI_SUCCESS)  material.metallic  = factor;
+		if (mat->Get(AI_MATKEY_ROUGHNESS_FACTOR, factor) == AI_SUCCESS) material.roughness = factor;
 
 		// Base colour: newer Assimp reports glTF as BASE_COLOR, older formats as DIFFUSE
 		loadMaterialTextures(scene, mat, aiTextureType_BASE_COLOR, "diffuse", true, textures);
@@ -272,6 +280,15 @@ void model::ResetPose()
 	worldDirty = true;
 }
 
+void model::SetPBR(float metallic, float roughness)
+{
+	for (mesh& m : meshes)
+	{
+		m.material.metallic = metallic;
+		m.material.roughness = roughness;
+	}
+}
+
 void model::PrintHierarchy() const
 {
 	if (!nodes.empty()) printNode(0, 0);
@@ -290,14 +307,73 @@ void model::printNode(int index, int depth) const
 // Drawing
 // ------------------------------------------------------------------------------------------
 
+// Six frustum planes from a view-projection matrix (Gribb/Hartmann). A point is inside when dot(plane.xyz, p) + plane.w >= 0 for all six.
+struct Frustum
+{
+	glm::vec4 planes[6];
+	explicit Frustum(const glm::mat4& m)
+	{
+		auto row = [&](int i) { return glm::vec4(m[0][i], m[1][i], m[2][i], m[3][i]); };
+		planes[0] = row(3) + row(0);	// left
+		planes[1] = row(3) - row(0);	// right
+		planes[2] = row(3) + row(1);	// bottom
+		planes[3] = row(3) - row(1);	// top
+		planes[4] = row(3) + row(2);	// near
+		planes[5] = row(3) - row(2);	// far
+	}
+	// world-space AABB test (conservative: never culls something visible)
+	bool Intersects(const glm::vec3& mn, const glm::vec3& mx) const
+	{
+		for (const glm::vec4& p : planes)
+		{
+			glm::vec3 v(p.x >= 0.0f ? mx.x : mn.x, p.y >= 0.0f ? mx.y : mn.y, p.z >= 0.0f ? mx.z : mn.z);	// corner furthest along the plane normal
+			if (glm::dot(glm::vec3(p), v) + p.w < 0.0f) return false;
+		}
+		return true;
+	}
+};
+
 void model::Draw(Shader& shader, Camera& camera)
 {
 	if (!loaded) return;
 	if (worldDirty) updateWorld();
 
-	for (const Node& n : nodes)
-		for (unsigned int m : n.meshIndices)
-			meshes[m].Draw(shader, camera, transform * n.world);
+	// ---- 1) culling: decide which meshes are worth a draw call ----
+	visibleScratch.clear();
+	{
+		CpuScope scope(CPU_CULLING);
+		Frustum frustum(camera.cameraMatrix);
+		for (unsigned int ni = 0; ni < nodes.size(); ni++)
+		{
+			const Node& n = nodes[ni];
+			if (n.meshIndices.empty()) continue;
+			glm::mat4 M = transform * n.world;
+			for (unsigned int m : n.meshIndices)
+			{
+				const mesh& ms = meshes[m];
+				gStats.trisSubmitted += ms.TriangleCount();
+
+				glm::vec3 wmin(std::numeric_limits<float>::max()), wmax(std::numeric_limits<float>::lowest());
+				for (int c = 0; c < 8; c++)
+				{
+					glm::vec3 corner((c & 1) ? ms.boundsMax.x : ms.boundsMin.x,
+									 (c & 2) ? ms.boundsMax.y : ms.boundsMin.y,
+									 (c & 4) ? ms.boundsMax.z : ms.boundsMin.z);
+					glm::vec3 p = glm::vec3(M * glm::vec4(corner, 1.0f));
+					wmin = glm::min(wmin, p);
+					wmax = glm::max(wmax, p);
+				}
+				if (frustum.Intersects(wmin, wmax)) visibleScratch.emplace_back(ni, m);
+			}
+		}
+	}
+
+	// ---- 2) submission: issue the draw calls ----
+	{
+		CpuScope scope(CPU_SUBMISSION);
+		for (const auto& v : visibleScratch)
+			meshes[v.second].Draw(shader, camera, transform * nodes[v.first].world);
+	}
 }
 
 void model::DrawDepth(Shader& shader)

@@ -1,4 +1,5 @@
 #include "mesh.h"
+#include "Profiler.h"
 #include <limits>
 
 mesh::mesh(std::vector<Vertex>& vertices, std::vector<GLuint>& indices, std::vector<Texture>& textures, const Material& material)
@@ -68,8 +69,8 @@ void mesh::Draw(Shader& shader, Camera& camera, const glm::mat4& modelMatrix)
 
 	// --- material ---
 	glUniform4fv(glGetUniformLocation(shader.ID, "baseColor"), 1, glm::value_ptr(material.baseColor));
-	glUniform1f(glGetUniformLocation(shader.ID, "shininess"), material.shininess);
-	glUniform1f(glGetUniformLocation(shader.ID, "specularStrength"), material.specularStrength);
+	glUniform1f(glGetUniformLocation(shader.ID, "metallic"), material.metallic);
+	glUniform1f(glGetUniformLocation(shader.ID, "roughness"), material.roughness);
 	glUniform1i(glGetUniformLocation(shader.ID, "hasDiffuseTex"), hasDiffuse);
 	glUniform1i(glGetUniformLocation(shader.ID, "hasSpecularTex"), hasSpecular);
 
@@ -82,6 +83,10 @@ void mesh::Draw(Shader& shader, Camera& camera, const glm::mat4& modelMatrix)
 	glUniformMatrix3fv(glGetUniformLocation(shader.ID, "normalMatrix"), 1, GL_FALSE, glm::value_ptr(normalMatrix));
 
 	glDrawElements(GL_TRIANGLES, (GLsizei)indices.size(), GL_UNSIGNED_INT, 0);
+
+	// stats
+	if (material.baseColor.a < 0.999f) gStats.transparentDraws++; else gStats.opaqueDraws++;
+	gStats.trisVisible += TriangleCount();
 }
 
 void mesh::DrawDepth(Shader& shader, const glm::mat4& modelMatrix)

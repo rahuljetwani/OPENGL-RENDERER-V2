@@ -8,5 +8,5 @@ uniform samplerCube skybox;
 
 void main()
 {
-    FragColor = texture(skybox, texCoords);
+    FragColor = texture(skybox, texCoords);     // the cubemap is SRGB8, so this is already linear light
 }
