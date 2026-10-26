@@ -10,9 +10,9 @@ V2 adds **physically based rendering (PBR)** and a **robotic arm**. I'm also sta
 
 ## Screenshots
 
-![Screenshot 1](opengl_renderer/screenshots/OpenGL Digital Twin 26-10-2026 14_31_56.png)
-![Screenshot 2](opengl_renderer/screenshots/OpenGL Digital Twin 26-10-2026 14_32_47.png)
-![Screenshot 3](opengl_renderer/screenshots/OpenGL Digital Twin 26-10-2026 14_34_17.png)
+![Screenshot 1](opengl_renderer/screenshots/OpenGL%20Digital%20Twin%2026-10-2026%2014_31_56.png)
+![Screenshot 2](opengl_renderer/screenshots/OpenGL%20Digital%20Twin%2026-10-2026%2014_32_47.png)
+![Screenshot 3](opengl_renderer/screenshots/OpenGL%20Digital%20Twin%2026-10-2026%2014_34_17.png)
 
 
 ## What's new in V2
@@ -30,6 +30,7 @@ V2 adds **physically based rendering (PBR)** and a **robotic arm**. I'm also sta
 - stb_image for textures
 - (https://github.com/nlohmann/json)](https://github.com/nlohmann/json) for cpp based json
 - IMGUI for UI
+- assimp for model loading 
 
 
 
