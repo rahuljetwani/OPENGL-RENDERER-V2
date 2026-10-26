@@ -2,6 +2,5 @@
 
 void main()
 {
-    // depth only; the hardware writes gl_FragCoord.z for us
-    //```~``
+    // depth only, the GPU writes the depth for us
 }

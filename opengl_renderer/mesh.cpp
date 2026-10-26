@@ -9,7 +9,7 @@ mesh::mesh(std::vector<Vertex>& vertices, std::vector<GLuint>& indices, std::vec
 	mesh::textures = textures;
 	mesh::material = material;
 
-	// Local bounding box
+	// find the bounding box
 	if (!vertices.empty())
 	{
 		boundsMin = glm::vec3(std::numeric_limits<float>::max());
@@ -41,51 +41,34 @@ void mesh::Draw(Shader& shader, Camera& camera, const glm::mat4& modelMatrix)
 	shader.Activate();
 	vao.Bind();
 
-	// --- textures: bound to units 0,1,2... in order, named diffuse0, specular0, ... ---
-	unsigned int numDiffuse = 0;
-	unsigned int numSpecular = 0;
-	bool hasDiffuse = false;
-	bool hasSpecular = false;
-
-	for (unsigned int i = 0; i < textures.size(); i++)
+	// texture (only one diffuse texture for now)
+	bool hasDiffuse = !textures.empty();
+	if (hasDiffuse)
 	{
-		std::string num;
-		const std::string& type = textures[i].type;
-
-		if (type == "diffuse")
-		{
-			num = std::to_string(numDiffuse++);
-			hasDiffuse = true;
-		}
-		else if (type == "specular")
-		{
-			num = std::to_string(numSpecular++);
-			hasSpecular = true;
-		}
-
-		glUniform1i(glGetUniformLocation(shader.ID, (type + num).c_str()), i);
-		textures[i].Bind(i);
+		glUniform1i(glGetUniformLocation(shader.ID, "diffuse0"), 0);
+		textures[0].Bind(0);
 	}
 
-	// --- material ---
+	// material
 	glUniform4fv(glGetUniformLocation(shader.ID, "baseColor"), 1, glm::value_ptr(material.baseColor));
 	glUniform1f(glGetUniformLocation(shader.ID, "metallic"), material.metallic);
 	glUniform1f(glGetUniformLocation(shader.ID, "roughness"), material.roughness);
 	glUniform1i(glGetUniformLocation(shader.ID, "hasDiffuseTex"), hasDiffuse);
-	glUniform1i(glGetUniformLocation(shader.ID, "hasSpecularTex"), hasSpecular);
 
-	// --- camera + transforms ---
+	// camera and transform
 	glUniform3f(glGetUniformLocation(shader.ID, "camPos"), camera.Position.x, camera.Position.y, camera.Position.z);
 	camera.Matrix(shader, "camMatrix");
 
-	glm::mat3 normalMatrix = glm::transpose(glm::inverse(glm::mat3(modelMatrix)));	// correct under non-uniform scale too
+	// normals need the inverse transpose, otherwise scaled models get wrong lighting
+	glm::mat3 normalMatrix = glm::transpose(glm::inverse(glm::mat3(modelMatrix)));
 	glUniformMatrix4fv(glGetUniformLocation(shader.ID, "model"), 1, GL_FALSE, glm::value_ptr(modelMatrix));
 	glUniformMatrix3fv(glGetUniformLocation(shader.ID, "normalMatrix"), 1, GL_FALSE, glm::value_ptr(normalMatrix));
 
 	glDrawElements(GL_TRIANGLES, (GLsizei)indices.size(), GL_UNSIGNED_INT, 0);
 
-	// stats
-	if (material.baseColor.a < 0.999f) gStats.transparentDraws++; else gStats.opaqueDraws++;
+	// counters for the stats panel
+	if (material.baseColor.a < 0.999f) gStats.transparentDraws++;
+	else gStats.opaqueDraws++;
 	gStats.trisVisible += TriangleCount();
 }
 

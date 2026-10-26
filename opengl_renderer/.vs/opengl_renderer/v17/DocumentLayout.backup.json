@@ -1,12 +1,32 @@
 {
   "Version": 1,
   "WorkspaceRootPath": "E:\\Projects\\opengl_Renderer\\opengl_renderer\\",
-  "Documents": [],
+  "Documents": [
+    {
+      "AbsoluteMoniker": "D:0:0:{87C682D4-F03A-4F0E-A8A9-E695554AC1AE}|opengl_renderer.vcxproj|E:\\Projects\\opengl_Renderer\\opengl_renderer\\main.cpp||{D0E1A5C6-B359-4E41-9B60-3365922C2A22}",
+      "RelativeMoniker": "D:0:0:{87C682D4-F03A-4F0E-A8A9-E695554AC1AE}|opengl_renderer.vcxproj|solutionrelative:main.cpp||{D0E1A5C6-B359-4E41-9B60-3365922C2A22}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{87C682D4-F03A-4F0E-A8A9-E695554AC1AE}|opengl_renderer.vcxproj|E:\\Projects\\opengl_Renderer\\opengl_renderer\\sim\\RobotKinematics.h||{D0E1A5C6-B359-4E41-9B60-3365922C2A22}",
+      "RelativeMoniker": "D:0:0:{87C682D4-F03A-4F0E-A8A9-E695554AC1AE}|opengl_renderer.vcxproj|solutionrelative:sim\\RobotKinematics.h||{D0E1A5C6-B359-4E41-9B60-3365922C2A22}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{87C682D4-F03A-4F0E-A8A9-E695554AC1AE}|opengl_renderer.vcxproj|E:\\Projects\\opengl_Renderer\\opengl_renderer\\Environment.cpp||{D0E1A5C6-B359-4E41-9B60-3365922C2A22}",
+      "RelativeMoniker": "D:0:0:{87C682D4-F03A-4F0E-A8A9-E695554AC1AE}|opengl_renderer.vcxproj|solutionrelative:Environment.cpp||{D0E1A5C6-B359-4E41-9B60-3365922C2A22}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{87C682D4-F03A-4F0E-A8A9-E695554AC1AE}|opengl_renderer.vcxproj|E:\\Projects\\opengl_Renderer\\opengl_renderer\\RobotArm.cpp||{D0E1A5C6-B359-4E41-9B60-3365922C2A22}",
+      "RelativeMoniker": "D:0:0:{87C682D4-F03A-4F0E-A8A9-E695554AC1AE}|opengl_renderer.vcxproj|solutionrelative:RobotArm.cpp||{D0E1A5C6-B359-4E41-9B60-3365922C2A22}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{87C682D4-F03A-4F0E-A8A9-E695554AC1AE}|opengl_renderer.vcxproj|E:\\Projects\\opengl_Renderer\\opengl_renderer\\sim\\RobotKinematics.cpp||{D0E1A5C6-B359-4E41-9B60-3365922C2A22}",
+      "RelativeMoniker": "D:0:0:{87C682D4-F03A-4F0E-A8A9-E695554AC1AE}|opengl_renderer.vcxproj|solutionrelative:sim\\RobotKinematics.cpp||{D0E1A5C6-B359-4E41-9B60-3365922C2A22}"
+    }
+  ],
   "DocumentGroupContainers": [
     {
       "Orientation": 0,
       "VerticalTabListWidth": 256,
-<<<<<<< HEAD
       "DocumentGroups": [
         {
           "DockedWidth": 200,
@@ -20,54 +40,64 @@
               "RelativeDocumentMoniker": "main.cpp",
               "ToolTip": "E:\\Projects\\opengl_Renderer\\opengl_renderer\\main.cpp",
               "RelativeToolTip": "main.cpp",
-              "ViewState": "AgIAAIMAAAAAAAAAAAAAAJQAAAAeAAAAAAAAAA==",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAAEQAAAAnAAAAAAAAAA==",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000677|",
-              "WhenOpened": "2026-09-30T04:48:11.181Z",
+              "WhenOpened": "2026-10-23T07:57:46.071Z",
               "IsPinned": true,
               "EditorCaption": ""
             },
             {
               "$type": "Document",
-              "DocumentIndex": 1,
-              "Title": "model.cpp",
-              "DocumentMoniker": "E:\\Projects\\opengl_Renderer\\opengl_renderer\\model.cpp",
-              "RelativeDocumentMoniker": "model.cpp",
-              "ToolTip": "E:\\Projects\\opengl_Renderer\\opengl_renderer\\model.cpp",
-              "RelativeToolTip": "model.cpp",
-              "ViewState": "AgIAAFoAAAAAAAAAAAAAABsAAAAsAAAAAAAAAA==",
+              "DocumentIndex": 2,
+              "Title": "Environment.cpp",
+              "DocumentMoniker": "E:\\Projects\\opengl_Renderer\\opengl_renderer\\Environment.cpp",
+              "RelativeDocumentMoniker": "Environment.cpp",
+              "ToolTip": "E:\\Projects\\opengl_Renderer\\opengl_renderer\\Environment.cpp",
+              "RelativeToolTip": "Environment.cpp",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAAEcAAACBAAAAAAAAAA==",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000677|",
-              "WhenOpened": "2026-09-30T13:11:05.358Z"
+              "WhenOpened": "2026-10-25T11:03:35.72Z"
             },
             {
               "$type": "Document",
-              "DocumentIndex": 2,
-              "Title": "shadowmap.frag",
-              "DocumentMoniker": "E:\\Projects\\opengl_Renderer\\opengl_renderer\\shadowmap.frag",
-              "RelativeDocumentMoniker": "shadowmap.frag",
-              "ToolTip": "E:\\Projects\\opengl_Renderer\\opengl_renderer\\shadowmap.frag",
-              "RelativeToolTip": "shadowmap.frag",
+              "DocumentIndex": 1,
+              "Title": "RobotKinematics.h",
+              "DocumentMoniker": "E:\\Projects\\opengl_Renderer\\opengl_renderer\\sim\\RobotKinematics.h",
+              "RelativeDocumentMoniker": "sim\\RobotKinematics.h",
+              "ToolTip": "E:\\Projects\\opengl_Renderer\\opengl_renderer\\sim\\RobotKinematics.h",
+              "RelativeToolTip": "sim\\RobotKinematics.h",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAAAcAAABFAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000680|",
+              "WhenOpened": "2026-10-23T09:38:11.498Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 4,
+              "Title": "RobotKinematics.cpp",
+              "DocumentMoniker": "E:\\Projects\\opengl_Renderer\\opengl_renderer\\sim\\RobotKinematics.cpp",
+              "RelativeDocumentMoniker": "sim\\RobotKinematics.cpp",
+              "ToolTip": "E:\\Projects\\opengl_Renderer\\opengl_renderer\\sim\\RobotKinematics.cpp",
+              "RelativeToolTip": "sim\\RobotKinematics.cpp",
               "ViewState": "AgIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==",
-              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.001001|",
-              "WhenOpened": "2026-09-30T13:07:37.914Z"
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000677|",
+              "WhenOpened": "2026-10-23T08:01:23.68Z"
             },
             {
               "$type": "Document",
               "DocumentIndex": 3,
-              "Title": "shadowmap.vert",
-              "DocumentMoniker": "E:\\Projects\\opengl_Renderer\\opengl_renderer\\shadowmap.vert",
-              "RelativeDocumentMoniker": "shadowmap.vert",
-              "ToolTip": "E:\\Projects\\opengl_Renderer\\opengl_renderer\\shadowmap.vert",
-              "RelativeToolTip": "shadowmap.vert",
-              "ViewState": "AgIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==",
-              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.001001|",
-              "WhenOpened": "2026-09-30T13:07:37.104Z"
+              "Title": "RobotArm.cpp",
+              "DocumentMoniker": "E:\\Projects\\opengl_Renderer\\opengl_renderer\\RobotArm.cpp",
+              "RelativeDocumentMoniker": "RobotArm.cpp",
+              "ToolTip": "E:\\Projects\\opengl_Renderer\\opengl_renderer\\RobotArm.cpp",
+              "RelativeToolTip": "RobotArm.cpp",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAAAwAAAABAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000677|",
+              "WhenOpened": "2026-10-23T08:00:37.159Z"
             }
           ]
         }
       ]
-=======
-      "DocumentGroups": []
->>>>>>> parent of 8ebbb84 (Master Update 30-09-2026)
     }
   ]
 }

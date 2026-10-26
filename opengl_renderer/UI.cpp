@@ -6,7 +6,7 @@
 
 static const float RAD2DEG = 57.29577951f;
 
-// 1200000 -> "1.2 M", 342 -> "342"
+// 1200000 -> "1.2 M"
 static void formatCount(char* out, size_t size, unsigned long long v)
 {
 	if (v >= 1000000ULL)     std::snprintf(out, size, "%.1f M", v / 1.0e6);
@@ -30,8 +30,8 @@ void UI::Init(GLFWwindow* window)
 {
 	IMGUI_CHECKVERSION();
 	ImGui::CreateContext();
-	ImGui::GetIO().IniFilename = nullptr;		// don't create an imgui.ini file
-	ImGui::GetIO().ConfigFlags |= ImGuiConfigFlags_NoMouseCursorChange;	// the camera hides/shows the cursor itself
+	ImGui::GetIO().IniFilename = nullptr;		// no imgui.ini file
+	ImGui::GetIO().ConfigFlags |= ImGuiConfigFlags_NoMouseCursorChange;	// the camera controls the cursor
 	ImGui::StyleColorsDark();
 	ImGui_ImplGlfw_InitForOpenGL(window, true);
 	ImGui_ImplOpenGL3_Init("#version 330");
@@ -92,16 +92,16 @@ void UI::StatsPanel(const Profiler& p)
 	ImGui::End();
 }
 
-void UI::RobotPanel(RobotArm& arm, float& exposureEV, float& sunIntensity)
+void UI::ControlPanel(RobotArm& arm, Scene& scene, float& exposureEV, float& sunIntensity)
 {
 	ImGui::SetNextWindowPos(ImVec2(ImGui::GetIO().DisplaySize.x - 10.0f, 10.0f), ImGuiCond_FirstUseEver, ImVec2(1.0f, 0.0f));
 	ImGui::SetNextWindowSize(ImVec2(340, 0), ImGuiCond_FirstUseEver);
-	ImGui::Begin("ROBOT ARM");
+	ImGui::Begin("CONTROLS");
 
 	const RobotConfig& cfg = arm.config;
 	RobotState& state = arm.state;
 
-	// angles are stored in radians, SliderAngle shows and edits them in degrees (limits come from the config)
+	// angles are stored in radians, the slider shows degrees
 	ImGui::SeparatorText("JOINT ANGLES");
 	ImGui::SliderAngle("Base", &state.base, cfg.baseLimit.min * RAD2DEG, cfg.baseLimit.max * RAD2DEG);
 	ImGui::SliderAngle("Shoulder", &state.shoulder, cfg.shoulderLimit.min * RAD2DEG, cfg.shoulderLimit.max * RAD2DEG);
@@ -111,11 +111,14 @@ void UI::RobotPanel(RobotArm& arm, float& exposureEV, float& sunIntensity)
 	ImGui::SliderFloat("Exposure (EV)", &exposureEV, -4.0f, 4.0f);
 	ImGui::SliderFloat("Sun intensity", &sunIntensity, 0.0f, 20.0f);
 
-	ImGui::SeparatorText("MATERIAL");
+	ImGui::SeparatorText("ROBOT MATERIAL");
 	bool changed = false;
 	changed |= ImGui::SliderFloat("Metallic", &arm.config.linkMetallic, 0.0f, 1.0f);
 	changed |= ImGui::SliderFloat("Roughness", &arm.config.linkRoughness, 0.0f, 1.0f);
 	if (changed) arm.ApplyMaterials();
+
+	ImGui::SeparatorText("SCENE");
+	ImGui::Checkbox("Material spheres", &scene.showShowcase);
 
 	ImGui::End();
 }

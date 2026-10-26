@@ -5,8 +5,9 @@
 #include <GLFW/glfw3.h>
 #include "Profiler.h"
 #include "RobotArm.h"
+#include "Scene.h"
 
-// Dear ImGui. Per frame:  UI::NewFrame();  panels...;  (draw the scene)  UI::Render();
+// Dear ImGui. Each frame: NewFrame, the panels, draw the scene, Render.
 namespace UI
 {
 	void Init(GLFWwindow* window);
@@ -14,13 +15,14 @@ namespace UI
 	void NewFrame();
 	void Render();
 
-	bool WantsMouse();		// pointer is over a panel, so the camera should ignore the mouse
+	// true when the mouse is over a panel, so the camera should ignore it
+	bool WantsMouse();
 
-	// FPS, CPU / GPU times, draw calls, triangles
+	// fps, CPU / GPU times, draw calls, triangles
 	void StatsPanel(const Profiler& profiler);
 
-	// joint angle sliders + a few lighting / material controls
-	void RobotPanel(RobotArm& arm, float& exposureEV, float& sunIntensity);
+	// joint sliders, lighting, robot material and scene options
+	void ControlPanel(RobotArm& arm, Scene& scene, float& exposureEV, float& sunIntensity);
 }
 
 #endif

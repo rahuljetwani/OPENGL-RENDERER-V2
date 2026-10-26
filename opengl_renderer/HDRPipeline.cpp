@@ -20,7 +20,7 @@ HDRPipeline::HDRPipeline(int w, int h)
 	glGenFramebuffers(1, &fbo);
 	glBindFramebuffer(GL_FRAMEBUFFER, fbo);
 
-	// RGBA16F = floating point colour, values above 1.0 are kept
+	// 16-bit float colour keeps values above 1.0
 	glGenTextures(1, &colorTex);
 	glBindTexture(GL_TEXTURE_2D, colorTex);
 	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA16F, width, height, 0, GL_RGBA, GL_FLOAT, nullptr);
@@ -72,7 +72,7 @@ void HDRPipeline::Resolve(float exposureEV)
 	glDisable(GL_CULL_FACE);
 
 	shader.Activate();
-	glUniform1f(glGetUniformLocation(shader.ID, "exposure"), std::exp2(exposureEV));	// EV stops -> multiplier
+	glUniform1f(glGetUniformLocation(shader.ID, "exposure"), std::exp2(exposureEV));	// stops -> multiplier
 	glActiveTexture(GL_TEXTURE0);
 	glBindTexture(GL_TEXTURE_2D, colorTex);
 	glBindVertexArray(quadVAO);

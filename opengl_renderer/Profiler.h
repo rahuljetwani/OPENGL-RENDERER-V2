@@ -4,21 +4,21 @@
 #include <glad/glad.h>
 #include <chrono>
 
-// Counters that are reset every frame (filled in by mesh / model)
+// counters reset every frame (filled by mesh and model)
 struct RenderStats
 {
 	unsigned int opaqueDraws = 0;
 	unsigned int transparentDraws = 0;
-	unsigned long long trisSubmitted = 0;	// triangles of every mesh we asked to draw
-	unsigned long long trisVisible = 0;		// triangles that survived frustum culling and were drawn
+	unsigned long long trisSubmitted = 0;	// all triangles we asked for
+	unsigned long long trisVisible = 0;		// triangles actually drawn
 };
 extern RenderStats gStats;
 
 enum CpuStage { CPU_UPDATE, CPU_CULLING, CPU_SUBMISSION, CPU_STAGE_COUNT };
 enum GpuStage { GPU_SHADOW, GPU_FORWARD, GPU_POST, GPU_STAGE_COUNT };
 
-// CPU timers use std::chrono, GPU timers use OpenGL timer queries (read back one frame late).
-// Numbers are smoothed a little so they are readable in the UI.
+// CPU times use std::chrono, GPU times use OpenGL timer queries (read one frame late).
+// Values are smoothed so the UI is readable.
 class Profiler
 {
 public:
@@ -32,7 +32,7 @@ public:
 	float frameMs = 0.0f;
 	float cpuMs[CPU_STAGE_COUNT] = {};
 	float gpuMs[GPU_STAGE_COUNT] = {};
-	RenderStats stats;				// counters of the last finished frame
+	RenderStats stats;				// last finished frame
 
 	double cpuAccum[CPU_STAGE_COUNT] = {};
 
@@ -46,7 +46,7 @@ private:
 };
 extern Profiler gProfiler;
 
-// adds the time spent in a scope to a CPU stage
+// adds the time of a scope to a CPU stage
 struct CpuScope
 {
 	CpuStage stage;

@@ -4,16 +4,16 @@
 #include <glad/glad.h>
 #include "shaderClass.h"
 
-// The scene is drawn into a 16-bit float framebuffer, so light values can go above 1.0.
-// Resolve() then applies exposure + tone mapping + sRGB and draws the result to the window.
+// Draws the scene into a 16-bit float framebuffer (light can go above 1.0),
+// then Resolve() applies exposure and tone mapping and shows it on the window.
 class HDRPipeline
 {
 public:
 	HDRPipeline(int width, int height);
 
-	void BeginScene();					// start drawing into the HDR framebuffer
+	void BeginScene();					// start drawing into the HDR image
 	void EndScene();					// back to the window
-	void Resolve(float exposureEV);		// tone map the HDR image onto the window
+	void Resolve(float exposureEV);		// tone map onto the window
 
 private:
 	int width, height;

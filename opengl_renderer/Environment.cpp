@@ -4,7 +4,7 @@
 #include <stb/stb_image.h>
 #include <iostream>
 
-// unit cube, positions only (36 vertices)
+// unit cube, 36 vertices
 static const float CUBE[] =
 {
 	-1,-1,-1,  1, 1,-1,  1,-1,-1,   1, 1,-1, -1,-1,-1, -1, 1,-1,
@@ -15,7 +15,7 @@ static const float CUBE[] =
 	-1, 1,-1,  1, 1, 1,  1, 1,-1,   1, 1, 1, -1, 1,-1, -1, 1, 1
 };
 
-// the six cameras used to render into the faces of a cubemap
+// one camera per cubemap face
 static const glm::mat4 CAPTURE_PROJ = glm::perspective(glm::radians(90.0f), 1.0f, 0.1f, 10.0f);
 static const glm::mat4 CAPTURE_VIEWS[6] =
 {
@@ -27,7 +27,7 @@ static const glm::mat4 CAPTURE_VIEWS[6] =
 	glm::lookAt(glm::vec3(0), glm::vec3( 0, 0,-1), glm::vec3(0,-1, 0))
 };
 
-// empty float cubemap that we can render into
+// empty float cubemap to render into
 static GLuint makeCubemap(int size, bool mipmaps)
 {
 	GLuint tex;
@@ -50,7 +50,7 @@ void Environment::drawCube()
 	glBindVertexArray(0);
 }
 
-// draws the cube from the inside once per face into `target` (shader needs uniforms "projection" and "view")
+// draws the cube once per face into `target`
 void Environment::renderToCubemap(Shader& shader, GLuint target, int size, int mip)
 {
 	shader.Activate();
@@ -66,14 +66,57 @@ void Environment::renderToCubemap(Shader& shader, GLuint target, int size, int m
 	}
 }
 
-// the six skybox pictures -> one cubemap. SRGB8 means the GPU gives us linear colours when we sample it.
+// .hdr panorama -> cubemap. Returns false if the file is missing, so the caller can use the jpg faces.
+bool Environment::loadHDR(const char* file)
+{
+	if (!file || !file[0]) return false;
+
+	stbi_set_flip_vertically_on_load(true);
+	int w, h, channels;
+	float* data = stbi_loadf(file, &w, &h, &channels, 3);
+	stbi_set_flip_vertically_on_load(false);
+	if (!data)
+	{
+		std::cout << "[Environment] no HDR at '" << file << "', using the jpg skybox\n";
+		return false;
+	}
+
+	GLuint equirect;
+	glGenTextures(1, &equirect);
+	glBindTexture(GL_TEXTURE_2D, equirect);
+	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB16F, w, h, 0, GL_RGB, GL_FLOAT, data);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+	stbi_image_free(data);
+
+	const int size = 1024;
+	envCubemap = makeCubemap(size, true);
+	envSize = (float)size;
+
+	Shader s("ibl_cube.vert", "ibl_equirect.frag");
+	s.Activate();
+	glUniform1i(glGetUniformLocation(s.ID, "equirectangularMap"), 0);
+	glActiveTexture(GL_TEXTURE0);
+	glBindTexture(GL_TEXTURE_2D, equirect);
+	renderToCubemap(s, envCubemap, size, 0);
+	s.Delete();
+	glDeleteTextures(1, &equirect);
+
+	glBindTexture(GL_TEXTURE_CUBE_MAP, envCubemap);
+	glGenerateMipmap(GL_TEXTURE_CUBE_MAP);
+	return true;
+}
+
+// six jpg pictures -> one cubemap (SRGB8 so sampling gives linear colour)
 void Environment::loadFaces()
 {
-	const char* faces[6] = { "skybox/negx.jpg", "skybox/posx.jpg", "skybox/posy.jpg", "skybox/negy.jpg", "skybox/posx.jpg", "skybox/negz.jpg" };
+	const char* faces[6] = { "skybox/negx.jpg", "skybox/posx.jpg", "skybox/posy.jpg", "skybox/negy.jpg", "skybox/posz.jpg", "skybox/negz.jpg" };
 
 	glGenTextures(1, &envCubemap);
 	glBindTexture(GL_TEXTURE_CUBE_MAP, envCubemap);
-	stbi_set_flip_vertically_on_load(false);		// Texture.cpp turns this on for models, cubemaps must not be flipped
+	stbi_set_flip_vertically_on_load(false);		// Texture.cpp turns flipping on, cubemaps must not be flipped
 	for (int i = 0; i < 6; i++)
 	{
 		int w, h, channels;
@@ -93,16 +136,16 @@ void Environment::loadFaces()
 	glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_R, GL_CLAMP_TO_EDGE);
 	glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
 	glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-	glGenerateMipmap(GL_TEXTURE_CUBE_MAP);			// the convolutions below read blurrier mips
+	glGenerateMipmap(GL_TEXTURE_CUBE_MAP);
 }
 
-Environment::Environment()
+Environment::Environment(const char* hdrFile)
 {
-	// remember the state we change, so the main loop is not affected
+	// remember what we change, so we can put it back
 	GLint oldFBO, oldViewport[4];
 	glGetIntegerv(GL_FRAMEBUFFER_BINDING, &oldFBO);
 	glGetIntegerv(GL_VIEWPORT, oldViewport);
-	glDisable(GL_CULL_FACE);		// we look at the cube from the inside
+	glDisable(GL_CULL_FACE);		// we look at the cube from inside
 	glDisable(GL_DEPTH_TEST);
 
 	glGenVertexArrays(1, &cubeVAO);
@@ -115,9 +158,9 @@ Environment::Environment()
 	glBindVertexArray(0);
 	glGenFramebuffers(1, &captureFBO);
 
-	loadFaces();
+	if (!loadHDR(hdrFile)) loadFaces();
 
-	// 1) diffuse: how bright is the sky when seen from a surface facing each direction
+	// 1) diffuse light
 	irradianceMap = makeCubemap(32, false);
 	{
 		Shader s("ibl_cube.vert", "ibl_irradiance.frag");
@@ -129,7 +172,7 @@ Environment::Environment()
 		s.Delete();
 	}
 
-	// 2) specular: the sky blurred by different amounts, mip 0 = sharp ... last mip = rough
+	// 2) reflections, mip 0 = sharp, last mip = rough
 	const int prefilterSize = 128;
 	prefilterMap = makeCubemap(prefilterSize, true);
 	glGenerateMipmap(GL_TEXTURE_CUBE_MAP);
@@ -148,7 +191,7 @@ Environment::Environment()
 		s.Delete();
 	}
 
-	// 3) BRDF lookup table (drawn with a fullscreen triangle, no vertex buffer needed)
+	// 3) BRDF lookup table (one fullscreen triangle)
 	glGenTextures(1, &brdfLUT);
 	glBindTexture(GL_TEXTURE_2D, brdfLUT);
 	glTexImage2D(GL_TEXTURE_2D, 0, GL_RG16F, 256, 256, 0, GL_RG, GL_FLOAT, nullptr);
@@ -194,7 +237,7 @@ void Environment::BindIBL(Shader& pbr, GLuint firstUnit)
 void Environment::DrawSky(Shader& sky, const glm::mat4& view, const glm::mat4& projection)
 {
 	sky.Activate();
-	glm::mat4 viewNoMove = glm::mat4(glm::mat3(view));		// the sky must not move when the camera moves
+	glm::mat4 viewNoMove = glm::mat4(glm::mat3(view));		// sky ignores camera position
 	glUniformMatrix4fv(glGetUniformLocation(sky.ID, "view"), 1, GL_FALSE, glm::value_ptr(viewNoMove));
 	glUniformMatrix4fv(glGetUniformLocation(sky.ID, "projection"), 1, GL_FALSE, glm::value_ptr(projection));
 	glUniform1i(glGetUniformLocation(sky.ID, "skybox"), 0);

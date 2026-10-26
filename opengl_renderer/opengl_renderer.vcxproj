@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8"?>
+﻿<?xml version="1.0" encoding="utf-8"?>
 <Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup Label="ProjectConfigurations">
     <ProjectConfiguration Include="Debug|Win32">
@@ -164,6 +164,8 @@
     <ClCompile Include="Profiler.cpp" />
     <ClCompile Include="Environment.cpp" />
     <ClCompile Include="HDRPipeline.cpp" />
+    <ClCompile Include="Primitives.cpp" />
+    <ClCompile Include="Scene.cpp" />
     <ClCompile Include="UI.cpp" />
     <ClCompile Include="imgui\imgui.cpp" />
     <ClCompile Include="imgui\imgui_draw.cpp" />
@@ -177,8 +179,6 @@
     <None Include="default.vert" />
     <None Include="framebuffer.frag" />
     <None Include="framebuffer.vert" />
-    <None Include="light.frag" />
-    <None Include="light.vert" />
     <None Include="shadowmap.frag" />
     <None Include="shadowmap.vert" />
     <None Include="skybox.frag" />
@@ -202,6 +202,8 @@
     <ClInclude Include="Profiler.h" />
     <ClInclude Include="Environment.h" />
     <ClInclude Include="HDRPipeline.h" />
+    <ClInclude Include="Primitives.h" />
+    <ClInclude Include="Scene.h" />
     <ClInclude Include="UI.h" />
     <ClInclude Include="imgui\imgui.h" />
     <ClInclude Include="imgui\imgui_internal.h" />

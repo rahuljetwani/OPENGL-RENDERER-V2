@@ -9,15 +9,12 @@
 #include "Camera.h"
 #include "Texture.h"
 
-// Everything the fragment shader needs to know about a surface.
-// Textures live in mesh::textures; this holds the numeric part (colour factor, shininess).
+// what the PBR shader needs to know about a surface
 struct Material
 {
-	glm::vec4 baseColor = glm::vec4(1.0f);	// albedo: multiplied with the diffuse texture (or used alone if there is none)
-	float metallic  = 0.0f;					// PBR metal/roughness workflow: 0 = dielectric (paint, plastic), 1 = bare metal
-	float roughness = 0.5f;					// 0 = mirror, 1 = fully diffuse-looking
-	float shininess = 32.0f;				// (legacy Blinn-Phong values, no longer used by default.frag)
-	float specularStrength = 0.25f;
+	glm::vec4 baseColor = glm::vec4(1.0f);	// albedo, multiplied with the texture if there is one
+	float metallic  = 0.0f;					// 0 = plastic / paint, 1 = bare metal
+	float roughness = 0.5f;					// 0 = mirror, 1 = very rough
 };
 
 class mesh
@@ -25,10 +22,10 @@ class mesh
 public:
 	std::vector <Vertex> vertices;
 	std::vector <GLuint> indices;
-	std::vector <Texture> textures;
+	std::vector <Texture> textures;			// only the diffuse texture is used
 	Material material;
 
-	// Local-space bounding box (used for camera framing / shadow fitting)
+	// bounding box in local space, used for frustum culling
 	glm::vec3 boundsMin = glm::vec3(0.0f);
 	glm::vec3 boundsMax = glm::vec3(0.0f);
 
@@ -36,12 +33,12 @@ public:
 
 	mesh(std::vector <Vertex>& vertices, std::vector <GLuint>& indices, std::vector <Texture>& textures, const Material& material = Material());
 
-	// Full colour draw. modelMatrix = local -> world. Updates the draw-call / triangle counters (Profiler.h).
-	void Draw(Shader& shader, Camera& camera, const glm::mat4& modelMatrix);
-
 	size_t TriangleCount() const { return indices.size() / 3; }
 
-	// Geometry only (shadow pass): sets "model" and draws. No textures, no camera.
+	// modelMatrix goes from local space to world space
+	void Draw(Shader& shader, Camera& camera, const glm::mat4& modelMatrix);
+
+	// shadow pass: geometry only
 	void DrawDepth(Shader& shader, const glm::mat4& modelMatrix);
 };
 #endif

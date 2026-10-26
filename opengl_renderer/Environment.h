@@ -5,17 +5,17 @@
 #include <glm/glm.hpp>
 #include "shaderClass.h"
 
-// The skybox and the lighting that comes from it (image based lighting), built once at startup:
-//   skybox faces -> environment cubemap
-//                -> irradiance map   (soft diffuse light from the sky)
-//                -> prefiltered map  (blurry reflections, one mip per roughness)
-//   brdfLUT      -> lookup table used by the PBR shader
+// Sky and the lighting that comes from it (image based lighting), built once at startup:
+//   sky - environment cubemap
+//       - irradiance map  (soft light for diffuse surfaces)
+//       - prefilter map   (blurry reflections, one mip per roughness)
+//   plus a BRDF lookup table for the PBR shader
 class Environment
 {
 public:
-	Environment();
+	Environment(const char* hdrFile = "");
 
-	// binds the three IBL textures to units firstUnit..firstUnit+2 and sets the sampler uniforms
+	// binds the three IBL textures to units firstUnit .. firstUnit + 2
 	void BindIBL(Shader& pbrShader, GLuint firstUnit);
 
 	void DrawSky(Shader& skyShader, const glm::mat4& view, const glm::mat4& projection);
@@ -26,6 +26,7 @@ private:
 	float envSize = 0.0f;
 	const int prefilterMips = 5;
 
+	bool loadHDR(const char* file);
 	void loadFaces();
 	void renderToCubemap(Shader& shader, GLuint target, int size, int mip);
 	void drawCube();
